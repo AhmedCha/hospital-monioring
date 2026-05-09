@@ -1,5 +1,5 @@
 #include "sensors.h"
-#include "globals.h" // Pull in the global variables to share with Core 0
+#include "globals.h"
 
 #include "MAX30105.h"
 #include "heartRate.h"
@@ -13,12 +13,12 @@ float currentSpO2 = 0.0;
 float currentTemp = 0.0;
 float currentHumidity = 0.0;
 
-// Internal Sensor Objects & Variables (Only visible to this file)
+// Internal Sensor Objects & Variables (only visible to this file)
 DHT dht(DHT_PIN, DHT_TYPE);
 MAX30105 particleSensor;
 
 unsigned long lastDHTRead = 0;
-const unsigned long DHT_INTERVAL = 2000; // Read DHT every 2 seconds
+const unsigned long DHT_INTERVAL = 2000;
 
 // Health Sensor Buffers
 const byte RATE_SIZE = 4;
@@ -37,19 +37,17 @@ int8_t dummyValidHR;
 byte bufferIndex = 0;
 
 void initSensors() {
-  Serial.println("Initializing Sensors...");
+  DBG_PRINTLN("Initializing Sensors...");
 
-  // Init DHT
   dht.begin();
 
-  // Init MAX30102
-  Wire.begin(); // Ensure I2C bus is awake on ESP32
+  Wire.begin();
 
   if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) {
-    Serial.println("MAX30102 not found. Check wiring.");
+    DBG_PRINTLN("MAX30102 not found. Check wiring.");
   } else {
     particleSensor.setup();
-    Serial.println("MAX30102 Initialized.");
+    DBG_PRINTLN("MAX30102 Initialized.");
   }
 }
 
@@ -60,7 +58,6 @@ void updateSensors() {
     float t = dht.readTemperature();
     float h = dht.readHumidity();
 
-    // Only update globals if reading is valid
     if (!isnan(t) && !isnan(h)) {
       currentTemp = t;
       currentHumidity = h;
@@ -81,15 +78,13 @@ void updateSensors() {
         currentBPM = 0.0;
         currentSpO2 = 0.0;
       }
-      for (byte i = 0; i < RATE_SIZE; i++) {
+      for (byte i = 0; i < RATE_SIZE; i++)
         rates[i] = 0;
-      }
       rateSpot = 0;
       bufferIndex = 0;
     } else {
-      if (!fingerPresent) {
+      if (!fingerPresent)
         fingerPresent = true;
-      }
 
       // Heart Rate
       if (checkForBeat(irValue) == true) {
@@ -108,9 +103,8 @@ void updateSensors() {
                 validRates++;
               }
             }
-            if (validRates > 0) {
+            if (validRates > 0)
               currentBPM = (float)(beatAvg / validRates);
-            }
           }
         }
       }
@@ -124,11 +118,10 @@ void updateSensors() {
         maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength,
                                                redBuffer, &spo2_raw, &validSPO2,
                                                &dummyHR, &dummyValidHR);
-        if (validSPO2 == 1 && spo2_raw > 80 && spo2_raw <= 100) {
+        if (validSPO2 == 1 && spo2_raw > 80 && spo2_raw <= 100)
           currentSpO2 = (float)spo2_raw;
-        }
 
-        // Shift buffer to drop the oldest 25 samples
+        // Shift buffer — drop oldest 25 samples
         for (byte i = 25; i < 100; i++) {
           redBuffer[i - 25] = redBuffer[i];
           irBuffer[i - 25] = irBuffer[i];

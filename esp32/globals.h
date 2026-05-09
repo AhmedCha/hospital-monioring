@@ -5,6 +5,22 @@
 #include <ESPAsyncWebServer.h>
 #include <Preferences.h>
 
+// ---------------------------------------------------------------------------
+// Debug macros — controlled by passing -DDEBUG_MODE at compile time via:
+//   arduino-cli compile --build-property "build.extra_flags=-DDEBUG_MODE"
+// ---------------------------------------------------------------------------
+#ifdef DEBUG_MODE
+#define DBG_BEGIN(baud) Serial.begin(baud)
+#define DBG_PRINT(x) Serial.print(x)
+#define DBG_PRINTLN(x) Serial.println(x)
+#define DBG_PRINTF(...) Serial.printf(__VA_ARGS__)
+#else
+#define DBG_BEGIN(baud)
+#define DBG_PRINT(x)
+#define DBG_PRINTLN(x)
+#define DBG_PRINTF(...)
+#endif
+
 // Shared Objects
 extern Preferences preferences;
 extern AsyncWebServer server;
@@ -33,7 +49,7 @@ const unsigned long SCAN_INTERVAL_MS = 10000;
 const unsigned long DEBUG_INTERVAL_MS = 5000;
 const unsigned long FIREBASE_INTERVAL_MS = 1000;
 
-// Shared Sensor Variables (Assuming these are defined in sensors.h/.cpp)
+// Shared Sensor Variables
 extern float currentTemp;
 extern float currentHumidity;
 extern float currentBPM;
