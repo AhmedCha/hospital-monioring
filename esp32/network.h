@@ -21,8 +21,10 @@ extern AsyncClientClass aClient;
 extern FirebaseApp app;
 extern RealtimeDatabase Database;
 extern TaskHandle_t FirebaseTask;
+extern UserAuth *userAuth;
 
-// Task Declaration
+// Function Declarations
+void initFirebase();
 void firebaseUploadTask(void *pvParameters);
 
 #endif

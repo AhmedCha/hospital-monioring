@@ -93,15 +93,6 @@ Serial.println("==================================\n");
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nConnected to WiFi");
     Serial.println(WiFi.localIP());
-    if (currentFbUrl.length() > 0) {
-      ssl_client.setInsecure();
-      Serial.println("Initializing Firebase with NO AUTH...");
-      NoAuth no_auth;
-      initializeApp(aClient, app, getAuth(no_auth));
-      app.getApp<RealtimeDatabase>(Database);
-      Database.url(currentFbUrl); 
-      Serial.println("Firebase App Initialized.");
-    }
   } else {
     Serial.println("\nFailed to connect to WiFi");
     WiFi.disconnect();
