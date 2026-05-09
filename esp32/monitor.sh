@@ -1,63 +1,65 @@
 #!/bin/bash
 
-echo "=== Arduino/ESP32 Serial Monitor ==="
+# --- CONFIGURATION & DEFAULTS ---
+BAUD=115200
+PORT=""
 
-# SCAN FOR AVAILABLE PORTS
+# --- PARSE COMMAND LINE ARGUMENTS ---
+# Use -b flag to change baud rate (e.g., ./monitor.sh -b 9600)
+while getopts "b:" opt; do
+  case $opt in
+  b) BAUD=$OPTARG ;;
+  *)
+    echo "Usage: $0 [-b baud_rate]" >&2
+    exit 1
+    ;;
+  esac
+done
+
+# --- SCAN FOR AVAILABLE PORTS ---
 available_ports=()
 for p in /dev/ttyUSB* /dev/ttyACM*; do
-    # -c checks if the character device file actually exists
-    if [ -c "$p" ]; then
-        available_ports+=("$p")
-    fi
+  if [ -c "$p" ]; then
+    available_ports+=("$p")
+  fi
 done
 
-# If the array is empty, no devices are plugged in
+# Check if any ports exist
 if [ ${#available_ports[@]} -eq 0 ]; then
-    echo "Error: No USB serial ports found!"
-    echo "Ensure your device is plugged in (looking for /dev/ttyUSB* or /dev/ttyACM*)."
-    exit 1
+  echo "Error: No USB serial ports found!"
+  exit 1
 fi
 
-# PORT SELECTION MENU
-echo ""
-echo "Available Serial Ports:"
-PS3="Select a port (enter number): "
+# --- PORT SELECTION LOGIC ---
+if [ ${#available_ports[@]} -eq 1 ]; then
+  # Strategy 1: Only one port found, auto-select it
+  PORT="${available_ports[0]}"
+  echo "Auto-selected only available port: $PORT"
+else
+  # Strategy 2: Multiple ports found, show a GUI popup
+  # Ensure zenity is installed: sudo apt install zenity
+  PORT=$(zenity --list --title="ESP32 Port Selection" \
+    --column="Available Ports" "${available_ports[@]}" \
+    --height=300 --width=250 --text="Multiple devices detected. Pick one:")
 
-select PORT in "${available_ports[@]}"; do
-    if [ -n "$PORT" ]; then
-        echo "Selected port: $PORT"
-        break
-    else
-        echo "Invalid selection. Please enter a valid number."
-    fi
-done
+  # If user cancels the popup
+  if [ -z "$PORT" ]; then
+    echo "No port selected. Exiting."
+    exit 1
+  fi
+fi
 
-# BAUD RATE SELECTION MENU
-echo ""
-echo "Common Baud Rates:"
-common_bauds=("9600" "115200" "460800" "Custom")
-PS3="Select a baud rate (enter number): "
-
-select BAUD in "${common_bauds[@]}"; do
-    if [ "$BAUD" == "Custom" ]; then
-        read -p "Type your custom baud rate: " BAUD
-        break
-    elif [ -n "$BAUD" ]; then
-        echo "Selected baud rate: $BAUD"
-        break
-    else
-        echo "Invalid selection. Please enter a valid number."
-    fi
-done
-
-# CONFIGURE AND READ
-echo ""
+# --- CONFIGURE AND READ ---
+echo "----------------------------------------"
 echo "Listening on $PORT at $BAUD baud..."
 echo "Press Ctrl+C to stop."
 echo "----------------------------------------"
 
-# Configure the serial port to raw mode with the correct baud rate
+# Set permissions (optional, helps if you get 'Permission Denied')
+# sudo chmod 666 "$PORT"
+
+# Configure serial port
 stty -F "$PORT" "$BAUD" cs8 -cstopb -parenb raw -echo
 
-# Read and print the output continuously
+# Read and print output
 cat "$PORT"
