@@ -62,14 +62,18 @@ void setup() {
   preferences.end();
 
   // Display Loaded Configurations 
-  Serial.println("\n==================================");
-  Serial.println("     CURRENT CONFIGURATIONS       ");
-  Serial.println("==================================");
-  Serial.println("WiFi SSID:      " + currentSSID);
-  Serial.println("AP SSID:        " + currentAPSSID);
-  Serial.println("Room ID:        " + currentRoomId);
-  Serial.println("Patient ID:     " + currentPatientId);
-  Serial.println("==================================\n");
+Serial.println("==================================");
+Serial.println("     CURRENT CONFIGURATIONS       ");
+Serial.println("==================================");
+Serial.println("WiFi SSID:      " + currentSSID);
+Serial.println("AP SSID:        " + currentAPSSID);
+Serial.println("Room ID:        " + currentRoomId);
+Serial.println("Patient ID:     " + currentPatientId);
+Serial.println("FB URL:         " + currentFbUrl);
+Serial.println("FB API Key:     " + currentFbApiKey);
+Serial.println("FB Email:       " + currentFbEmail);
+Serial.println("FB Pass len:    " + String(currentFbPassword.length()) + " chars");
+Serial.println("==================================\n");
 
   // Initialize Hardware Sensors
   initSensors();
@@ -89,7 +93,6 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nConnected to WiFi");
     Serial.println(WiFi.localIP());
-    
     if (currentFbUrl.length() > 0) {
       ssl_client.setInsecure();
       Serial.println("Initializing Firebase with NO AUTH...");

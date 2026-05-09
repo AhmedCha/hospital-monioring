@@ -103,6 +103,7 @@ void handleUpdateSettings(AsyncWebServerRequest *request) {
     // Handle Firebase URL
     if (request->hasParam("fb_url", true)) {
       String newFbUrl = request->getParam("fb_url", true)->value();
+      newFbUrl.trim();
       if (newFbUrl != currentFbUrl && newFbUrl.length() > 0) {
         currentFbUrl = newFbUrl;
         preferences.putString("fb_url", currentFbUrl);
@@ -114,6 +115,7 @@ void handleUpdateSettings(AsyncWebServerRequest *request) {
     // Handle Firebase API key
     if (request->hasParam("fb_api_key", true)) {
       String newFbApiKey = request->getParam("fb_api_key", true)->value();
+      newFbApiKey.trim();
       if (newFbApiKey != currentFbApiKey && newFbApiKey.length() > 0) {
         currentFbApiKey = newFbApiKey;
         preferences.putString("fb_api_key", currentFbApiKey);
@@ -125,6 +127,7 @@ void handleUpdateSettings(AsyncWebServerRequest *request) {
     // Handle Firebase email
     if (request->hasParam("fb_email", true)) {
       String newFbEmail = request->getParam("fb_email", true)->value();
+      newFbEmail.trim();
       if (newFbEmail != currentFbEmail && newFbEmail.length() > 0) {
         currentFbEmail = newFbEmail;
         preferences.putString("fb_email", currentFbEmail);
@@ -136,6 +139,7 @@ void handleUpdateSettings(AsyncWebServerRequest *request) {
     // Handle Firebase password
     if (request->hasParam("fb_password", true)) {
       String newFbPassword = request->getParam("fb_password", true)->value();
+      newFbPassword.trim();
       if (newFbPassword.length() > 0 && newFbPassword != currentFbPassword) {
         currentFbPassword = newFbPassword;
         preferences.putString("fb_password", currentFbPassword);
