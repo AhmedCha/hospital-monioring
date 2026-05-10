@@ -33,6 +33,7 @@ export const peopleRouter = router({
     .mutation(({ ctx, input }) =>
       db.createPerson({
         userId: ctx.user.id,
+        isActive: 1,
         ...input,
       })
     ),
@@ -155,6 +156,7 @@ export const peopleRouter = router({
             photoUrl: null,
             photoStorageKey: null,
             enrolledFaceDescriptor: null,
+            isActive: 1,
           });
           added++;
         } else if (!exists.firebaseId) {

@@ -113,7 +113,7 @@ export async function logDetectionEvent(data: InsertDetectionEvent): Promise<{ i
   const docRef = await adminFirestore.collection("detectionEvents").add(eventData);
   
   // Store in Realtime Database as well for client listeners
-  await adminDb.ref(`detectionEvents/${data.userId}`).push({
+  await (adminDb as any).ref(`detectionEvents/${data.userId}`).push({
     ...eventData,
     id: docRef.id
   });
@@ -139,7 +139,7 @@ export async function logRoomActivity(data: InsertRoomActivityLog): Promise<{ id
   
   const docRef = await adminFirestore.collection("roomActivityLogs").add(activityData);
   
-  await adminDb.ref(`roomActivityLogs/${data.roomId}`).push({
+  await (adminDb as any).ref(`roomActivityLogs/${data.roomId}`).push({
     ...activityData,
     id: docRef.id
   });
@@ -163,11 +163,11 @@ export async function getDetectionEventsByPersonId(personId: string, limit: numb
   
   // Refined: Query all events for a user and filter for the person.
   // In a real app, we'd store a secondary index `personEvents/${personId}`.
-  const snapshot = await adminDb.ref(`detectionEvents`)
+  const snapshot = await (adminDb as any).ref(`detectionEvents`)
     .once("value");
   
   const allEvents: any[] = [];
-  snapshot.forEach((userEvents) => {
+  snapshot.forEach((userEvents: any) => {
     userEvents.forEach((event: any) => {
       if (event.val().personId === personId) {
         allEvents.push(event.val());
@@ -197,7 +197,7 @@ export async function createAlertLog(data: InsertAlertLog): Promise<{ id: string
   await res.update({ id: res.id });
   
   // Store in Realtime Database as well for client listeners
-  await adminDb.ref(`alertLogs/${data.userId}`).push(alertData);
+  await (adminDb as any).ref(`alertLogs/${data.userId}`).push(alertData);
   
   return { id: res.id };
 }
@@ -215,13 +215,13 @@ export async function getAlertLogsByUserId(userId: string, limit: number = 100):
 // --- Activity Logs ---
 
 async function logToActivity(data: InsertRoomActivityLog): Promise<void> {
-  await adminDb.ref("roomActivityLogs").push({
+  await (adminDb as any).ref("roomActivityLogs").push({
     ...data,
     timestamp: data.timestamp || new Date().toISOString(),
   });
 }
 
 export async function getFirebasePatientsMeta(): Promise<any> {
-  const snapshot = await adminDb.ref("patients_meta").once("value");
+  const snapshot = await (adminDb as any).ref("patients_meta").once("value");
   return snapshot.val();
 }
