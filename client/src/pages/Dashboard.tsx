@@ -7,9 +7,34 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Camera, AlertCircle, CheckCircle, Clock, Loader2, User, UserCheck, Shield, Users, HeartPulse, Activity, Thermometer, Droplets } from "lucide-react";
+import { Camera, AlertCircle, CheckCircle, Clock, Loader2, User, UserCheck, Shield, Users, HeartPulse, Activity, Thermometer, Droplets, Settings2, BellRing, TrendingUp } from "lucide-react";
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from "recharts";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type DetectionStatus = "idle" | "present" | "absent" | "unknown";
+type DetectionStatus = "idle" | "present" | "absent" | "unknown" | "unauthorized";
 
 interface VitalsData {
   heartRate: number;
@@ -26,6 +51,7 @@ interface RoomData {
 export default function Dashboard() {
   const { data: people } = trpc.people.list.useQuery();
   const logEventMutation = trpc.events.log.useMutation();
+  const sendEmailMutation = trpc.people.sendAlertEmail.useMutation();
   
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -33,17 +59,106 @@ export default function Dashboard() {
   const [lastDetectionTime, setLastDetectionTime] = useState<Date | null>(null);
   const [confidenceScore, setConfidenceScore] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentlyInRoom, setCurrentlyInRoom] = useState<{name: string, role: string}[]>([]);
+  const [currentlyInRoom, setCurrentlyInRoom] = useState<{name: string, role: string, isAuthorized: boolean}[]>([]);
   
   // Real-time Firebase data states
   const [currentVitals, setCurrentVitals] = useState<VitalsData | null>(null);
   const [currentRoomData, setCurrentRoomData] = useState<RoomData | null>(null);
+  const [vitalsHistory, setVitalsHistory] = useState<VitalsData[]>([]);
+  const [roomHistory, setRoomHistory] = useState<RoomData[]>([]);
+
+  // Threshold States
+  const [thresholds, setThresholds] = useState({
+    hrMax: 100,
+    hrMin: 50,
+    spo2Min: 94,
+    tempMax: 30,
+    tempMin: 18,
+    humidityMax: 70,
+    humidityMin: 20
+  });
+
+  const sendEmailAlert = async (subject: string, message: string) => {
+    if (!selectedPatient || !people) return;
+    
+    const doctor = people.find(p => p.id === selectedPatient.assignedDoctorId);
+    const nurse = people.find(p => p.id === selectedPatient.assignedNurseId);
+    
+    const recipients = [doctor?.email, nurse?.email].filter(Boolean) as string[];
+    
+    if (recipients.length === 0) {
+      console.warn("[Dashboard] No assigned staff with email found for patient:", selectedPatient.name);
+      return;
+    }
+
+    for (const email of recipients) {
+      try {
+        await sendEmailMutation.mutateAsync({
+          recipientEmail: email,
+          subject: `[CLINICAL ALERT] ${subject} - ${selectedPatient.name}`,
+          message: `
+Patient: ${selectedPatient.name}
+Room: ${selectedPatient.roomId}
+Time: ${new Date().toLocaleString()}
+
+Alert Details:
+${message}
+
+Please check the monitoring dashboard immediately.
+          `.trim()
+        });
+      } catch (e) {
+        console.error("Failed to send email alert:", e);
+      }
+    }
+  };
+
+  const checkThresholds = (vitals: VitalsData | null, room: RoomData | null) => {
+    if (!vitals && !room) return;
+    
+    const now = Date.now();
+    const alertThrottle = 10000; // 10 seconds between same alert type
+
+    if (vitals) {
+      if (vitals.heartRate > thresholds.hrMax && (now - (lastEventTimeRef.current['hr-high'] || 0) > alertThrottle)) {
+        toast.error(`Critical Heart Rate: ${vitals.heartRate} BPM (High)`, { duration: 5000 });
+        lastEventTimeRef.current['hr-high'] = now;
+      }
+      if (vitals.heartRate < thresholds.hrMin && (now - (lastEventTimeRef.current['hr-low'] || 0) > alertThrottle)) {
+        toast.error(`Critical Heart Rate: ${vitals.heartRate} BPM (Low)`, { duration: 5000 });
+        lastEventTimeRef.current['hr-low'] = now;
+      }
+      if (vitals.spO2 < thresholds.spo2Min && (now - (lastEventTimeRef.current['spo2-low'] || 0) > alertThrottle)) {
+        toast.error(`Low Oxygen Saturation: ${vitals.spO2}%`, { duration: 5000 });
+        sendEmailAlert("Critical SpO2 Level", `Oxygen saturation dropped to ${vitals.spO2}%, which is below the safe threshold of ${thresholds.spo2Min}%.`);
+        lastEventTimeRef.current['spo2-low'] = now;
+      }
+      if (vitals.heartRate > thresholds.hrMax && (now - (lastEventTimeRef.current['hr-high'] || 0) > alertThrottle)) {
+        sendEmailAlert("Critical Heart Rate", `Heart rate reached ${vitals.heartRate} BPM, exceeding the safe limit of ${thresholds.hrMax} BPM.`);
+      }
+      if (vitals.heartRate < thresholds.hrMin && (now - (lastEventTimeRef.current['hr-low'] || 0) > alertThrottle)) {
+        sendEmailAlert("Critical Heart Rate", `Heart rate dropped to ${vitals.heartRate} BPM, below the safe limit of ${thresholds.hrMin} BPM.`);
+      }
+    }
+
+    if (room) {
+      if (room.temperature > thresholds.tempMax && (now - (lastEventTimeRef.current['temp-high'] || 0) > alertThrottle)) {
+        toast.warning(`High Room Temperature: ${room.temperature}°C`, { duration: 5000 });
+        lastEventTimeRef.current['temp-high'] = now;
+      }
+      if (room.temperature < thresholds.tempMin && (now - (lastEventTimeRef.current['temp-low'] || 0) > alertThrottle)) {
+        toast.warning(`Low Room Temperature: ${room.temperature}°C`, { duration: 5000 });
+        lastEventTimeRef.current['temp-low'] = now;
+      }
+    }
+  };
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastEventTimeRef = useRef<{ [key: string]: number }>({});
+  const lastFaceSeenTimeRef = useRef<number>(0);
 
   const { modelsLoaded, detectFaces, findBestMatch } = useFaceDetection();
 
@@ -127,14 +242,20 @@ export default function Dashboard() {
     const vitalsRef = ref(database, `patients/${selectedPatient.firebaseId}`);
     const unsubscribeVitals = onValue(vitalsRef, (snapshot) => {
       if (snapshot.exists()) {
-        // Find the latest entry (child with the newest timestamp)
         const data = snapshot.val();
-        // Since firebase stores pushes as an object of unique IDs:
         const entries = Object.values(data) as VitalsData[];
         if (entries.length > 0) {
-          // Sort to find the latest
           entries.sort((a, b) => b.timestamp - a.timestamp);
-          setCurrentVitals(entries[0]);
+          const latest = entries[0];
+          setCurrentVitals(latest);
+          
+          // Update history (keep last 20 readings)
+          setVitalsHistory(prev => {
+            const updated = [...prev, latest].sort((a, b) => a.timestamp - b.timestamp);
+            return updated.slice(-20);
+          });
+
+          checkThresholds(latest, null);
         }
       } else {
         setCurrentVitals(null);
@@ -157,7 +278,16 @@ export default function Dashboard() {
         const entries = Object.values(data) as RoomData[];
         if (entries.length > 0) {
           entries.sort((a, b) => b.timestamp - a.timestamp);
-          setCurrentRoomData(entries[0]);
+          const latest = entries[0];
+          setCurrentRoomData(latest);
+
+          // Update history (keep last 20 readings)
+          setRoomHistory(prev => {
+            const updated = [...prev, latest].sort((a, b) => a.timestamp - b.timestamp);
+            return updated.slice(-20);
+          });
+
+          checkThresholds(null, latest);
         }
       } else {
         setCurrentRoomData(null);
@@ -213,13 +343,21 @@ export default function Dashboard() {
       try {
         const faces = await detectFaces(videoRef.current);
         const now = Date.now();
-        const recognizedInFrame: {name: string, role: string}[] = [];
+        const recognizedInFrame: {name: string, role: string, isAuthorized: boolean}[] = [];
 
         if (faces.length === 0) {
           setDetectionStatus("absent");
           setConfidenceScore(0);
           setLastDetectionTime(new Date());
           setCurrentlyInRoom([]);
+
+          // Clear canvas after 3 seconds of no faces
+          if (now - lastFaceSeenTimeRef.current > 3000) {
+            const ctx = canvasRef.current.getContext("2d");
+            if (ctx) {
+              ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+          }
 
           const lastAbsenceTime = lastEventTimeRef.current["absence"] || 0;
           if (now - lastAbsenceTime > 60000) {
@@ -230,11 +368,14 @@ export default function Dashboard() {
               roomId: selectedPatient.roomId || "unknown",
               description: "Patient not detected in camera frame",
             });
+            sendEmailAlert("Patient Missing", `The patient is no longer detected by the room camera. Immediate room check required.`);
             lastEventTimeRef.current["absence"] = now;
           }
         } else {
+          lastFaceSeenTimeRef.current = now;
           let isPatientInFrame = false;
           let patientConfidence = 0;
+          let unknownCount = 0;
 
           const ctx = canvasRef.current.getContext("2d");
           if (ctx) {
@@ -247,22 +388,56 @@ export default function Dashboard() {
             const match = findBestMatch(face.descriptor, enrolledDescriptors);
             let personName = "Unknown";
             let personRole = "other";
+            let isAuthorized = false;
             let color = "#ef4444";
 
             if (match) {
               const person = knownPeople[match.index];
               personName = person.name;
               personRole = person.role;
-              recognizedInFrame.push({ name: person.name, role: person.role });
+              
+              if (person.id === selectedPatient.id) {
+                isAuthorized = true;
+              } else {
+                const authorizedIds = [
+                  selectedPatient.assignedDoctorId,
+                  selectedPatient.assignedNurseId
+                ].filter(Boolean);
+                isAuthorized = authorizedIds.includes(person.id);
+              }
+
+              recognizedInFrame.push({ name: person.name, role: person.role, isAuthorized });
 
               if (person.id === selectedPatient.id) {
                 isPatientInFrame = true;
                 patientConfidence = match.confidence;
                 color = "#10b981";
-              } else if (person.role === 'doctor' || person.role === 'nurse') {
-                color = "#6366f1";
               } else {
-                color = "#f59e0b";
+                const authorizedIds = [
+                  selectedPatient.assignedDoctorId,
+                  selectedPatient.assignedNurseId
+                ].filter(Boolean);
+
+                const isAuthorized = authorizedIds.includes(person.id);
+
+                if (isAuthorized) {
+                  color = "#6366f1"; // Indigo for authorized staff
+                } else {
+                  color = "#f43f5e"; // Rose for unauthorized
+                  const lastUnauthTime = lastEventTimeRef.current[`unauth-${person.id}`] || 0;
+                  if (now - lastUnauthTime > 120000) {
+                    await logEventMutation.mutateAsync({
+                      personId: person.id,
+                      eventType: "person recognized",
+                      severity: "alert",
+                      roomId: selectedPatient.roomId || "unknown",
+                      description: `Unauthorized person ${person.name} (${person.role}) entered the room.`,
+                      isAuthorized: 0
+                    });
+                    sendEmailAlert("Unauthorized Entry", `${person.name} (${person.role}) has entered ${selectedPatient.name}'s room but is not assigned to this patient.`);
+                    lastEventTimeRef.current[`unauth-${person.id}`] = now;
+                  }
+                }
               }
 
               const lastRecTime = lastEventTimeRef.current[`rec-${person.id}`] || 0;
@@ -277,6 +452,7 @@ export default function Dashboard() {
                 lastEventTimeRef.current[`rec-${person.id}`] = now;
               }
             } else {
+              unknownCount++;
               const lastUnknownTime = lastEventTimeRef.current["unknown"] || 0;
               if (now - lastUnknownTime > 30000) {
                 await logEventMutation.mutateAsync({
@@ -284,7 +460,9 @@ export default function Dashboard() {
                   severity: "alert",
                   roomId: selectedPatient.roomId || "unknown",
                   description: "Unauthorized person detected in room.",
+                  isAuthorized: 0
                 });
+                sendEmailAlert("Unknown Person Detected", `An unidentified individual has been detected in ${selectedPatient.name}'s room.`);
                 lastEventTimeRef.current["unknown"] = now;
               }
             }
@@ -301,15 +479,21 @@ export default function Dashboard() {
             }
           }
 
+          // Add unknown persons to the room list
+          for (let i = 0; i < unknownCount; i++) {
+            recognizedInFrame.push({ name: "Unknown Person", role: "unknown", isAuthorized: false });
+          }
+
           setCurrentlyInRoom(recognizedInFrame);
           
-          if (isPatientInFrame) {
+          const hasUnauthorized = recognizedInFrame.some(p => !p.isAuthorized);
+
+          if (hasUnauthorized) {
+            setDetectionStatus("unauthorized");
+            setConfidenceScore(0);
+          } else if (isPatientInFrame) {
             setDetectionStatus("present");
             setConfidenceScore(patientConfidence);
-          } else if (faces.length > recognizedInFrame.length) {
-            // More faces detected than recognized = unknown person present
-            setDetectionStatus("unknown");
-            setConfidenceScore(0);
           } else {
             setDetectionStatus("absent");
             setConfidenceScore(0);
@@ -337,6 +521,95 @@ export default function Dashboard() {
             <Shield className="w-4 h-4 text-indigo-500" />
             Unified Monitoring & AI Face Recognition
           </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="h-12 gap-2 border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                <Settings2 className="w-4 h-4 text-slate-500" />
+                <span className="font-semibold text-slate-700">Thresholds</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[450px] rounded-3xl border-none shadow-2xl">
+              <DialogHeader>
+                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                  <BellRing className="w-6 h-6 text-indigo-600" />
+                </div>
+                <DialogTitle className="text-2xl font-black text-slate-900">Monitor Thresholds</DialogTitle>
+                <DialogDescription className="text-slate-500 font-medium">
+                  Define safety boundaries for automated alerting.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-6">
+                <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <HeartPulse className="w-4 h-4 text-rose-500" />
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Vital Signs</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-end">
+                      <Label className="text-slate-600 font-bold">Heart Rate Range</Label>
+                      <Badge variant="outline" className="bg-white font-mono text-indigo-600 border-indigo-100">
+                        {thresholds.hrMin} - {thresholds.hrMax} BPM
+                      </Badge>
+                    </div>
+                    <Slider 
+                      defaultValue={[thresholds.hrMin, thresholds.hrMax]} 
+                      max={180} min={40} step={1}
+                      onValueChange={([min, max]) => setThresholds(t => ({ ...t, hrMin: min, hrMax: max }))}
+                    />
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between items-end">
+                      <Label className="text-slate-600 font-bold">Min SpO2 Level</Label>
+                      <Badge variant="outline" className="bg-white font-mono text-emerald-600 border-emerald-100">
+                        {thresholds.spo2Min}%
+                      </Badge>
+                    </div>
+                    <Slider 
+                      defaultValue={[thresholds.spo2Min]} 
+                      max={100} min={85} step={1}
+                      onValueChange={([val]) => setThresholds(t => ({ ...t, spo2Min: val }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Thermometer className="w-4 h-4 text-amber-500" />
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Environment</h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-end">
+                      <Label className="text-slate-600 font-bold">Temperature Range</Label>
+                      <Badge variant="outline" className="bg-white font-mono text-amber-600 border-amber-100">
+                        {thresholds.tempMin}° - {thresholds.tempMax}°C
+                      </Badge>
+                    </div>
+                    <Slider 
+                      defaultValue={[thresholds.tempMin, thresholds.tempMax]} 
+                      max={45} min={15} step={0.5}
+                      onValueChange={([min, max]) => setThresholds(t => ({ ...t, tempMin: min, tempMax: max }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button 
+                  className="w-full h-12 bg-slate-900 hover:bg-black rounded-xl font-bold" 
+                  onClick={() => toast.success("Thresholds synchronized successfully")}
+                >
+                  Save Monitoring Protocol
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -399,10 +672,12 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-12">
-        {/* Main Feed Section */}
+        {/* Left Column: Live Monitoring & Analytics */}
         <div className="lg:col-span-8 space-y-6">
-          <Card className="border-none shadow-xl overflow-hidden bg-slate-900 ring-1 ring-slate-800">
+          {/* Camera Feed Card */}
+          <Card className="border-none shadow-xl overflow-hidden bg-slate-900 ring-1 ring-slate-800 rounded-3xl">
             <div className="relative aspect-video group">
               <video
                 ref={videoRef}
@@ -445,10 +720,10 @@ export default function Dashboard() {
                 <div className="flex-1 w-full">
                   <label className="text-xs font-bold text-slate-500 mb-2 block uppercase tracking-tight">Active Patient Selection</label>
                   <Select value={selectedPatientId} onValueChange={setSelectedPatientId} disabled={isStreaming}>
-                    <SelectTrigger className="h-12 border-slate-200 focus:ring-indigo-500">
+                    <SelectTrigger className="h-12 border-slate-200 focus:ring-indigo-500 rounded-xl">
                       <SelectValue placeholder="Select a patient to begin monitoring..." />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-xl">
                       {people?.filter(p => p.role === 'patient').map((patient) => (
                         <SelectItem key={patient.id} value={String(patient.id)}>
                           <div className="flex items-center gap-2">
@@ -464,124 +739,231 @@ export default function Dashboard() {
                   <Button
                     onClick={startCamera}
                     disabled={isStreaming || !selectedPatientId || !modelsLoaded || !selectedPatient?.enrolledFaceDescriptor}
-                    className="h-12 px-8 bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
+                    className="h-12 px-8 bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95 rounded-xl"
                   >
                     <Camera className="w-4 h-4 mr-2" />
-                    Initialize Monitor
+                    Initialize
                   </Button>
                   <Button
                     onClick={stopCamera}
                     disabled={!isStreaming}
                     variant="outline"
-                    className="h-12 px-6 border-slate-200 hover:bg-slate-50 text-slate-600"
+                    className="h-12 px-6 border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl"
                   >
-                    Terminate
+                    Stop
                   </Button>
                 </div>
               </div>
               {!selectedPatient?.enrolledFaceDescriptor && selectedPatientId && (
                 <p className="mt-3 text-sm text-red-500 flex items-center gap-1 font-medium">
                   <AlertCircle className="w-4 h-4" />
-                  Biometric data missing for this patient. Please enroll their face in Patient Management.
-                </p>
-              )}
-              {selectedPatient && !selectedPatient?.firebaseId && selectedPatientId && (
-                <p className="mt-3 text-sm text-amber-500 flex items-center gap-1 font-medium">
-                  <AlertCircle className="w-4 h-4" />
-                  Patient not synced with Firebase. Real-time vitals will be unavailable.
+                  Biometric data missing.
                 </p>
               )}
             </div>
           </Card>
+
+          {/* Analytics Card */}
+          <Tabs defaultValue="vitals" className="w-full">
+            <Card className="border-none shadow-xl bg-white overflow-hidden rounded-3xl">
+              <CardHeader className="border-b border-slate-50 bg-slate-50/30 pb-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-xl font-black text-slate-900 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-indigo-500" />
+                      Live Analytics
+                    </CardTitle>
+                  </div>
+                  <TabsList className="grid w-full md:w-[300px] grid-cols-2 bg-slate-100/50 p-1 rounded-xl">
+                    <TabsTrigger value="vitals" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">Vitals</TabsTrigger>
+                    <TabsTrigger value="environment" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">Room</TabsTrigger>
+                  </TabsList>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <TabsContent value="vitals" className="m-0 p-6 focus-visible:ring-0">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={vitalsHistory}>
+                          <defs>
+                            <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorSpo2" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="timestamp" hide />
+                          <YAxis yAxisId="left" domain={[40, 160]} stroke="#64748b" fontSize={10} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="right" orientation="right" domain={[85, 100]} stroke="#10b981" fontSize={10} axisLine={false} tickLine={false} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                            labelFormatter={(t) => new Date(t).toLocaleTimeString()}
+                          />
+                          <Area yAxisId="left" type="monotone" dataKey="heartRate" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorHr)" name="HR (BPM)" animationDuration={500} />
+                          <Area yAxisId="right" type="monotone" dataKey="spO2" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorSpo2)" name="SpO2 (%)" animationDuration={500} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100">
+                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-0.5">Avg HR</p>
+                        <p className="text-xl font-black text-slate-900">
+                          {vitalsHistory.length > 0 ? (vitalsHistory.reduce((acc, v) => acc + v.heartRate, 0) / vitalsHistory.length).toFixed(0) : "--"} 
+                          <span className="text-xs font-medium text-slate-500 ml-1">BPM</span>
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-0.5">Avg SpO2</p>
+                        <p className="text-xl font-black text-slate-900">
+                          {vitalsHistory.length > 0 ? (vitalsHistory.reduce((acc, v) => acc + v.spO2, 0) / vitalsHistory.length).toFixed(1) : "--"} 
+                          <span className="text-xs font-medium text-slate-500 ml-1">%</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="environment" className="m-0 p-6 focus-visible:ring-0">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={roomHistory}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="timestamp" hide />
+                          <YAxis domain={['auto', 'auto']} stroke="#64748b" fontSize={10} axisLine={false} tickLine={false} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                            labelFormatter={(t) => new Date(t).toLocaleTimeString()}
+                          />
+                          <Line type="monotone" dataKey="temperature" stroke="#f59e0b" strokeWidth={3} dot={false} name="Temp (°C)" />
+                          <Line type="monotone" dataKey="humidity" stroke="#0ea5e9" strokeWidth={3} dot={false} name="Humidity (%)" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-2xl bg-amber-50/50 border border-amber-100">
+                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Max Temp</p>
+                        <p className="text-xl font-black text-slate-900">
+                          {roomHistory.length > 0 ? Math.max(...roomHistory.map(r => r.temperature)).toFixed(1) : "--"}
+                          <span className="text-xs font-medium text-slate-500 ml-1">°C</span>
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-sky-50/50 border border-sky-100">
+                        <p className="text-[10px] font-bold text-sky-600 uppercase tracking-widest mb-0.5">Humidity</p>
+                        <p className="text-xl font-black text-slate-900">
+                          {currentRoomData ? currentRoomData.humidity : "--"}
+                          <span className="text-xs font-medium text-slate-500 ml-1">%</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </CardContent>
+            </Card>
+          </Tabs>
         </div>
 
-        {/* Sidebar Info Section */}
+        {/* Right Column: Status & Activity */}
         <div className="lg:col-span-4 space-y-6">
-          <Card className={`border-none shadow-lg transition-all duration-500 ${
+          <Card className={`border-none shadow-lg transition-all duration-500 rounded-3xl ${
             detectionStatus === 'present' ? 'bg-emerald-50 ring-1 ring-emerald-200' : 
-            detectionStatus === 'absent' ? 'bg-amber-50 ring-1 ring-amber-200' : 
-            detectionStatus === 'unknown' ? 'bg-rose-50 ring-1 ring-rose-200' : 'bg-white'
+            detectionStatus === 'absent' && isStreaming ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-white'
           }`}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500">Detection Status</CardTitle>
+              <CardTitle className="text-xs font-bold uppercase tracking-widest text-slate-500">Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-4 py-4">
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
+              <div className="flex items-center gap-4 py-2">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
                   detectionStatus === 'present' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' :
-                  detectionStatus === 'absent' ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' :
-                  detectionStatus === 'unknown' ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-slate-100 text-slate-400'
+                  detectionStatus === 'unauthorized' ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse' :
+                  detectionStatus === 'absent' && isStreaming ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' :
+                  'bg-slate-100 text-slate-400'
                 }`}>
-                  {detectionStatus === 'present' ? <CheckCircle className="w-8 h-8" /> :
-                   detectionStatus === 'absent' ? <Clock className="w-8 h-8" /> :
-                   detectionStatus === 'unknown' ? <AlertCircle className="w-8 h-8" /> : <Camera className="w-8 h-8" />}
+                  {detectionStatus === 'present' ? <CheckCircle className="w-7 h-7" /> :
+                   detectionStatus === 'unauthorized' ? <AlertCircle className="w-7 h-7" /> :
+                   detectionStatus === 'absent' && isStreaming ? <Clock className="w-7 h-7" /> :
+                   <Camera className="w-7 h-7" />}
                 </div>
                 <div>
-                  <h4 className="text-2xl font-black text-slate-900 leading-tight">
-                    {detectionStatus === 'present' ? "Patient Present" :
-                     detectionStatus === 'absent' ? "Patient Absent" :
-                     detectionStatus === 'unknown' ? "Unknown Activity" : "Standby Mode"}
+                  <h4 className="text-xl font-black text-slate-900 leading-tight">
+                    {detectionStatus === 'present' ? "Present" :
+                     detectionStatus === 'unauthorized' ? "Unauthorized" :
+                     detectionStatus === 'absent' && isStreaming ? "Absent" : "Standby"}
                   </h4>
-                  <p className="text-sm font-medium text-slate-500 mt-0.5">
-                    {isStreaming ? `Tracking Room ${selectedPatient?.roomId || '...'}` : "Monitoring inactive"}
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                    {isStreaming ? `Room ${selectedPatient?.roomId || '...'}` : "Inactive"}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-lg">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex justify-between">
+          <Card className="border-none shadow-lg rounded-3xl">
+            <CardHeader className="pb-2 border-b border-slate-50">
+              <CardTitle className="text-xs font-bold uppercase tracking-widest text-slate-500 flex justify-between">
                 Who's In Room
                 <Users className="w-4 h-4" />
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
+            <CardContent className="pt-4">
+              <div className="space-y-3">
                 {currentlyInRoom.length > 0 ? (
                   currentlyInRoom.map((p, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 animate-in slide-in-from-right-2 duration-300" style={{animationDelay: `${i * 100}ms`}}>
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${p.role === 'doctor' ? 'bg-blue-500' : p.role === 'nurse' ? 'bg-teal-500' : 'bg-indigo-500'}`}>
-                        <UserCheck className="w-4 h-4" />
+                    <div key={i} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all animate-in slide-in-from-right-2 duration-300 ${
+                      p.isAuthorized ? 'bg-slate-50 border-slate-100' : 'bg-rose-50 border-rose-100'
+                    }`} style={{animationDelay: `${i * 100}ms`}}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white ${
+                        !p.isAuthorized ? 'bg-rose-500' :
+                        p.role === 'doctor' ? 'bg-blue-500' : 
+                        p.role === 'nurse' ? 'bg-teal-500' : 
+                        p.role === 'patient' ? 'bg-emerald-500' :
+                        'bg-slate-500'
+                      }`}>
+                        {!p.isAuthorized ? <AlertCircle className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-slate-900">{p.name}</p>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-sm font-bold ${p.isAuthorized ? 'text-slate-900' : 'text-rose-900'}`}>{p.name}</p>
+                          {!p.isAuthorized && (
+                            <Badge variant="destructive" className="text-[8px] h-4 px-1 rounded-sm uppercase tracking-tighter">Unauthorized</Badge>
+                          )}
+                        </div>
                         <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400">{p.role}</p>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 opacity-40">
+                  <div className="text-center py-8 opacity-20">
                     <User className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-xs font-semibold">No identified persons</p>
+                    <p className="text-xs font-semibold">Empty</p>
                   </div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-lg">
+          <Card className="border-none shadow-lg rounded-3xl">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500">Recognition Analytics</CardTitle>
+              <CardTitle className="text-xs font-bold uppercase tracking-widest text-slate-500">Analytics Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 pt-2">
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-slate-500 font-medium">Matching Confidence</span>
-                  <span className={`font-bold ${confidenceScore > 0.8 ? 'text-green-600' : 'text-amber-600'}`}>
-                    {(confidenceScore * 100).toFixed(1)}%
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500 font-bold text-xs uppercase tracking-tight">Confidence</span>
+                  <span className={`font-black ${confidenceScore > 0.8 ? 'text-green-600' : 'text-amber-600'}`}>
+                    {(confidenceScore * 100).toFixed(0)}%
                   </span>
                 </div>
-                <div className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-slate-500 font-medium">Last Neural Sync</span>
-                  <span className="font-bold text-slate-900">
-                    {lastDetectionTime ? lastDetectionTime.toLocaleTimeString() : "N/A"}
+                <div className="flex justify-between items-center p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500 font-bold text-xs uppercase tracking-tight">Last Sync</span>
+                  <span className="font-black text-slate-900">
+                    {lastDetectionTime ? lastDetectionTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : "--"}
                   </span>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 transition-colors">
-                  <span className="text-slate-500 font-medium">Known Dataset Size</span>
-                  <span className="font-bold text-indigo-600">{knownPeople.length} Identities</span>
                 </div>
               </div>
             </CardContent>

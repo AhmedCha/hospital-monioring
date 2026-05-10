@@ -23,10 +23,13 @@ export interface Person {
   userId: string;
   name: string;
   role: PersonRole;
+  email: string | null; // For staff notifications
   roomId: string | null;
   photoUrl: string | null;
   photoStorageKey: string | null;
   enrolledFaceDescriptor: any;
+  assignedDoctorId: string | null; // For patients
+  assignedNurseId: string | null; // For patients
   firebaseId?: string;
   isActive: number;
   createdAt: string;
@@ -45,6 +48,7 @@ export interface DetectionEvent {
   detectedFaceDescriptor: any;
   matchConfidence: string | null;
   roomId: string | null;
+  isAuthorized: number; // 1 if authorized (staff or patient), 0 otherwise
   timestamp: string;
   createdAt: string;
 }

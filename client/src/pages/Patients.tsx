@@ -27,7 +27,12 @@ export default function Patients() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: "", roomId: "" });
+  const [formData, setFormData] = useState({ 
+    name: "", 
+    roomId: "", 
+    assignedDoctorId: "none", 
+    assignedNurseId: "none" 
+  });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [photoUploadPersonId, setPhotoUploadPersonId] = useState<string | null>(null);
   const [photoUploadPersonName, setPhotoUploadPersonName] = useState<string>("");
@@ -35,7 +40,13 @@ export default function Patients() {
   const patients = people?.filter(p => p.role === "patient") || [];
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState({ id: "", name: "", roomId: "" });
+  const [editFormData, setEditFormData] = useState({ 
+    id: "", 
+    name: "", 
+    roomId: "", 
+    assignedDoctorId: "none", 
+    assignedNurseId: "none" 
+  });
 
   const handleEdit = async () => {
     if (!editFormData.name || !editFormData.roomId) {
@@ -48,6 +59,8 @@ export default function Patients() {
         id: editFormData.id,
         name: editFormData.name,
         roomId: editFormData.roomId,
+        assignedDoctorId: editFormData.assignedDoctorId === "none" ? null : editFormData.assignedDoctorId,
+        assignedNurseId: editFormData.assignedNurseId === "none" ? null : editFormData.assignedNurseId,
       });
       setIsEditDialogOpen(false);
       refetch();
@@ -68,8 +81,10 @@ export default function Patients() {
         name: formData.name,
         roomId: formData.roomId,
         role: "patient",
+        assignedDoctorId: formData.assignedDoctorId === "none" ? null : formData.assignedDoctorId,
+        assignedNurseId: formData.assignedNurseId === "none" ? null : formData.assignedNurseId,
       });
-      setFormData({ name: "", roomId: "" });
+      setFormData({ name: "", roomId: "", assignedDoctorId: "none", assignedNurseId: "none" });
       setIsDialogOpen(false);
       refetch();
       toast.success("Patient created successfully");
@@ -179,6 +194,40 @@ export default function Patients() {
                     onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
                   />
                 </div>
+                <div>
+                  <Label>Assigned Doctor</Label>
+                  <Select 
+                    value={formData.assignedDoctorId} 
+                    onValueChange={(val) => setFormData({ ...formData, assignedDoctorId: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {people?.filter(p => p.role === "doctor").map(doc => (
+                        <SelectItem key={doc.id} value={doc.id}>{doc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Assigned Nurse</Label>
+                  <Select 
+                    value={formData.assignedNurseId} 
+                    onValueChange={(val) => setFormData({ ...formData, assignedNurseId: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Nurse" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {people?.filter(p => p.role === "nurse").map(nurse => (
+                        <SelectItem key={nurse.id} value={nurse.id}>{nurse.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button onClick={handleCreate} className="w-full">
                   Create Patient
                 </Button>
@@ -238,7 +287,13 @@ export default function Patients() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => {
-                          setEditFormData({ id: patient.id, name: patient.name, roomId: patient.roomId || "" });
+                          setEditFormData({ 
+                            id: patient.id, 
+                            name: patient.name, 
+                            roomId: patient.roomId || "",
+                            assignedDoctorId: patient.assignedDoctorId || "none",
+                            assignedNurseId: patient.assignedNurseId || "none"
+                          });
                           setIsEditDialogOpen(true);
                         }}
                       >
@@ -275,6 +330,20 @@ export default function Patients() {
                       <span className="text-orange-600 font-medium">Pending</span>
                     </div>
                   )}
+                  <div className="pt-2 border-t border-slate-50 space-y-1">
+                    <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <span>Assigned Doctor</span>
+                      <span className="text-indigo-600">
+                        {people?.find(p => p.id === patient.assignedDoctorId)?.name || "Unassigned"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <span>Assigned Nurse</span>
+                      <span className="text-teal-600">
+                        {people?.find(p => p.id === patient.assignedNurseId)?.name || "Unassigned"}
+                      </span>
+                    </div>
+                  </div>
                   <div className="flex gap-2 pt-2">
                     {patient.photoUrl ? (
                       <DropdownMenu>
@@ -400,6 +469,40 @@ export default function Patients() {
                 value={editFormData.roomId}
                 onChange={(e) => setEditFormData({ ...editFormData, roomId: e.target.value })}
               />
+            </div>
+            <div>
+              <Label>Assigned Doctor</Label>
+              <Select 
+                value={editFormData.assignedDoctorId} 
+                onValueChange={(val) => setEditFormData({ ...editFormData, assignedDoctorId: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Doctor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {people?.filter(p => p.role === "doctor").map(doc => (
+                    <SelectItem key={doc.id} value={doc.id}>{doc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Assigned Nurse</Label>
+              <Select 
+                value={editFormData.assignedNurseId} 
+                onValueChange={(val) => setEditFormData({ ...editFormData, assignedNurseId: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Nurse" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {people?.filter(p => p.role === "nurse").map(nurse => (
+                    <SelectItem key={nurse.id} value={nurse.id}>{nurse.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button onClick={handleEdit} className="w-full">
               Save Changes

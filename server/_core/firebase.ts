@@ -92,7 +92,10 @@ export const adminDb = new Proxy({} as admin.database.Database, {
 
 export const adminFirestore = new Proxy({} as admin.firestore.Firestore, {
   get: (target, prop) => {
-    if (!_adminFirestore) _adminFirestore = admin.firestore();
+    if (!_adminFirestore) {
+      _adminFirestore = admin.firestore();
+      _adminFirestore.settings({ ignoreUndefinedProperties: true });
+    }
     const value = _adminFirestore[prop as keyof typeof _adminFirestore];
     return typeof value === "function" ? value.bind(_adminFirestore) : value;
   }

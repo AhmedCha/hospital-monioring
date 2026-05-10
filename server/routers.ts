@@ -85,6 +85,7 @@ export const appRouter = router({
         detectedFaceDescriptor: z.unknown().optional(),
         matchConfidence: z.string().optional(),
         roomId: z.string().optional(),
+        isAuthorized: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const event = await db.logDetectionEvent({
@@ -96,6 +97,7 @@ export const appRouter = router({
           detectedFaceDescriptor: input.detectedFaceDescriptor ?? null,
           matchConfidence: input.matchConfidence ?? null,
           roomId: input.roomId ?? null,
+          isAuthorized: input.isAuthorized ?? 1,
           timestamp: new Date().toISOString(),
         });
 
@@ -145,6 +147,23 @@ export const appRouter = router({
             severity: "info",
             title: "Patient Present",
             message: input.description || `Patient confirmed present in room ${input.roomId || "unknown"}`,
+            roomId: input.roomId ?? null,
+          });
+        }
+
+        // Logic for unauthorized access alert
+        if (input.isAuthorized === 0) {
+          await notifyOwner({
+            title: "Unauthorized Access Detected",
+            content: `An unauthorized person has entered room ${input.roomId || "unknown"}.`,
+          });
+          await db.createAlertLog({
+            userId: ctx.user.id,
+            detectionEventId: event.id,
+            alertType: "unknown person detected",
+            severity: "alert",
+            title: "Unauthorized Entry",
+            message: input.description || `Unauthorized person detected in room ${input.roomId || "unknown"}`,
             roomId: input.roomId ?? null,
           });
         }

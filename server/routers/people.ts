@@ -25,10 +25,13 @@ export const peopleRouter = router({
     .input(z.object({
       name: z.string().min(1),
       role: z.enum(["patient", "doctor", "nurse", "other"]),
+      email: z.string().email().optional().nullable(),
       roomId: z.string().optional().nullable(),
       photoUrl: z.string().optional(),
       photoStorageKey: z.string().optional(),
       enrolledFaceDescriptor: z.unknown().optional(),
+      assignedDoctorId: z.string().optional().nullable(),
+      assignedNurseId: z.string().optional().nullable(),
     }))
     .mutation(({ ctx, input }) =>
       db.createPerson({
@@ -36,10 +39,13 @@ export const peopleRouter = router({
         isActive: 1,
         name: input.name,
         role: input.role,
+        email: input.email ?? null,
         roomId: input.roomId ?? null,
         photoUrl: input.photoUrl ?? null,
         photoStorageKey: input.photoStorageKey ?? null,
         enrolledFaceDescriptor: input.enrolledFaceDescriptor ?? null,
+        assignedDoctorId: input.assignedDoctorId ?? null,
+        assignedNurseId: input.assignedNurseId ?? null,
       })
     ),
 
@@ -48,21 +54,27 @@ export const peopleRouter = router({
       id: z.string(),
       name: z.string().optional(),
       role: z.enum(["patient", "doctor", "nurse", "other"]).optional(),
+      email: z.string().email().optional().nullable(),
       roomId: z.string().optional().nullable(),
       photoUrl: z.string().optional().nullable(),
       photoStorageKey: z.string().optional().nullable(),
       enrolledFaceDescriptor: z.unknown().optional().nullable(),
       isActive: z.number().optional(),
+      assignedDoctorId: z.string().optional().nullable(),
+      assignedNurseId: z.string().optional().nullable(),
     }))
     .mutation(({ input }) =>
       db.updatePerson(input.id, {
         name: input.name,
         role: input.role,
+        email: input.email,
         roomId: input.roomId,
         photoUrl: input.photoUrl,
         photoStorageKey: input.photoStorageKey,
         enrolledFaceDescriptor: input.enrolledFaceDescriptor,
         isActive: input.isActive,
+        assignedDoctorId: input.assignedDoctorId,
+        assignedNurseId: input.assignedNurseId,
       })
     ),
 
@@ -161,6 +173,9 @@ export const peopleRouter = router({
             photoUrl: null,
             photoStorageKey: null,
             enrolledFaceDescriptor: null,
+            email: null,
+            assignedDoctorId: null,
+            assignedNurseId: null,
             isActive: 1,
           });
           added++;
@@ -172,6 +187,22 @@ export const peopleRouter = router({
       }
       
       return { success: true, added };
+    }),
+
+  sendAlertEmail: protectedProcedure
+    .input(z.object({
+      recipientEmail: z.string().email(),
+      subject: z.string(),
+      message: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      // For now, we log it. We'll implement actual mailing if requested.
+      console.log(`[Email Alert] To: ${input.recipientEmail}`);
+      console.log(`[Email Alert] Subject: ${input.subject}`);
+      console.log(`[Email Alert] Message: ${input.message}`);
+      
+      // MOCK: In a real app, use Nodemailer or SendGrid here
+      return { success: true };
     }),
 });
 

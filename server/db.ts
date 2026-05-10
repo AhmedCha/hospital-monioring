@@ -110,6 +110,7 @@ export const deletePatient = deletePerson;
 export async function logDetectionEvent(data: InsertDetectionEvent): Promise<{ id: string }> {
   const eventData = {
     ...data,
+    isAuthorized: data.isAuthorized ?? 1, // Default to authorized if not specified
     timestamp: data.timestamp || new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
