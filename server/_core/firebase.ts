@@ -21,6 +21,16 @@ if (!admin.apps.length) {
         console.log("[Firebase Admin] Stripping surrounding quotes...");
         saString = saString.slice(1, -1);
       }
+
+      // Check if the string is likely base64 encoded (doesn't start with '{')
+      if (!saString.startsWith('{')) {
+        try {
+          console.log("[Firebase Admin] Assuming service account is Base64 encoded. Decoding...");
+          saString = Buffer.from(saString, 'base64').toString('utf8');
+        } catch (e) {
+          console.error("[Firebase Admin] Failed to decode Base64 service account.");
+        }
+      }
       
       try {
         console.log("[Firebase Admin] Attempting to parse service account...");
@@ -43,12 +53,9 @@ if (!admin.apps.length) {
         console.log("[Firebase Admin] Initialization successful.");
       } catch (parseError: any) {
         console.error("[Firebase Admin] JSON Parse failed:", parseError.message);
-        console.error("[Firebase Admin] Error character at position:", parseError.at || "unknown");
-        // Log the string content in chunks to see exactly what's there
-        for(let i=0; i<saString.length; i+=500) {
-          console.log(`[Firebase Admin] Content chunk ${i/500}:`, saString.substring(i, i+500));
-        }
-        throw parseError;
+        console.error("[Firebase Admin] Please ensure your FIREBASE_SERVICE_ACCOUNT is valid JSON. If it contains newlines, consider base64 encoding it.");
+        // We do not throw here to prevent server crash on cold start. 
+        // Firebase services will fail when used, which gives a better TRPC error.
       }
     } else {
       console.log("[Firebase Admin] Initializing with Project ID fallback:", PROJECT_ID);
@@ -58,15 +65,38 @@ if (!admin.apps.length) {
         storageBucket: ENV.firebaseStorageBucket
       });
     }
-    console.log(`[Firebase Admin] Initialization successful for bucket: ${ENV.firebaseStorageBucket}`);
   } catch (error) {
     console.error("[Firebase Admin] Initialization failed:", error);
   }
 }
 
-export const adminAuth = admin.auth();
-export const adminDb = admin.database();
-export const adminFirestore = admin.firestore();
+let _adminAuth: admin.auth.Auth;
+let _adminDb: admin.database.Database;
+let _adminFirestore: admin.firestore.Firestore;
+
+export const adminAuth = new Proxy({} as admin.auth.Auth, {
+  get: (target, prop) => {
+    if (!_adminAuth) _adminAuth = admin.auth();
+    const value = _adminAuth[prop as keyof typeof _adminAuth];
+    return typeof value === "function" ? value.bind(_adminAuth) : value;
+  }
+});
+
+export const adminDb = new Proxy({} as admin.database.Database, {
+  get: (target, prop) => {
+    if (!_adminDb) _adminDb = admin.database();
+    const value = _adminDb[prop as keyof typeof _adminDb];
+    return typeof value === "function" ? value.bind(_adminDb) : value;
+  }
+});
+
+export const adminFirestore = new Proxy({} as admin.firestore.Firestore, {
+  get: (target, prop) => {
+    if (!_adminFirestore) _adminFirestore = admin.firestore();
+    const value = _adminFirestore[prop as keyof typeof _adminFirestore];
+    return typeof value === "function" ? value.bind(_adminFirestore) : value;
+  }
+});
 
 export type FirebaseTokenPayload = {
   uid: string;
