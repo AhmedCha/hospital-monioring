@@ -1,13 +1,13 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { getSessionCookieOptions } from "./_core/cookies.ts";
+import { systemRouter } from "./_core/systemRouter.ts";
+import { publicProcedure, router, protectedProcedure } from "./_core/trpc.ts";
 import { z } from "zod";
-import * as db from "./db";
-import { notifyOwner } from "./_core/notification";
-import { peopleRouter } from "./routers/people";
-import { sdk } from "./_core/sdk";
-import { verifyFirebaseToken } from "./_core/firebase";
+import * as db from "./db.ts";
+import { notifyOwner } from "./_core/notification.ts";
+import { peopleRouter } from "./routers/people.ts";
+import { sdk } from "./_core/sdk.ts";
+import { verifyFirebaseToken } from "./_core/firebase.ts";
 
 export const appRouter = router({
   system: systemRouter,

@@ -1,2 +1,2 @@
-import app from "../server/_core/index";
+import app from "../server/_core/index.ts";
 export default app;
