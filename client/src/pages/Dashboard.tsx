@@ -306,8 +306,13 @@ export default function Dashboard() {
           if (isPatientInFrame) {
             setDetectionStatus("present");
             setConfidenceScore(patientConfidence);
+          } else if (faces.length > recognizedInFrame.length) {
+            // More faces detected than recognized = unknown person present
+            setDetectionStatus("unknown");
+            setConfidenceScore(0);
           } else {
             setDetectionStatus("absent");
+            setConfidenceScore(0);
           }
           setLastDetectionTime(new Date());
         }

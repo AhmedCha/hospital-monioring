@@ -7,17 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Trash2, User, Camera, RefreshCw } from "lucide-react";
+import { Plus, Trash2, User, Camera, RefreshCw, MoreHorizontal, Edit } from "lucide-react";
 
 export default function Patients() {
   const { data: people, isLoading, refetch } = trpc.people.list.useQuery();
   const createMutation = trpc.people.create.useMutation();
   const deleteMutation = trpc.people.delete.useMutation();
+  const updateMutation = trpc.people.update.useMutation();
   const uploadPhotoMutation = trpc.people.uploadPhoto.useMutation();
   const syncMutation = trpc.people.syncFirebasePatients.useMutation();
+
+  const { data: rooms = [] } = trpc.people.getRooms.useQuery();
 
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -28,6 +33,29 @@ export default function Patients() {
   const [photoUploadPersonName, setPhotoUploadPersonName] = useState<string>("");
 
   const patients = people?.filter(p => p.role === "patient") || [];
+
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({ id: "", name: "", roomId: "" });
+
+  const handleEdit = async () => {
+    if (!editFormData.name || !editFormData.roomId) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    try {
+      await updateMutation.mutateAsync({
+        id: editFormData.id,
+        name: editFormData.name,
+        roomId: editFormData.roomId,
+      });
+      setIsEditDialogOpen(false);
+      refetch();
+      toast.success("Patient details updated successfully");
+    } catch (error) {
+      toast.error("Failed to update patient details");
+    }
+  };
 
   const handleCreate = async () => {
     if (!formData.name || !formData.roomId) {
@@ -108,9 +136,9 @@ export default function Patients() {
           <p className="text-muted-foreground mt-2">Enroll and manage patients for real-time monitoring</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2" 
+          <Button
+            variant="outline"
+            className="gap-2"
             onClick={handleSyncFirebase}
             disabled={isSyncing}
           >
@@ -124,38 +152,39 @@ export default function Patients() {
                 Add Patient
               </Button>
             </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Enroll New Patient</DialogTitle>
-              <DialogDescription>
-                Create a new patient profile for monitoring. You'll upload their photo in the next step.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Patient Name</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., John Doe"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Enroll New Patient</DialogTitle>
+                <DialogDescription>
+                  Create a new patient profile for monitoring. You'll upload their photo in the next step.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Patient Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g., John Doe"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="roomId">Room ID</Label>
+                  <Input
+                    id="roomId"
+                    list="available-rooms"
+                    placeholder="e.g., 101"
+                    value={formData.roomId}
+                    onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                  />
+                </div>
+                <Button onClick={handleCreate} className="w-full">
+                  Create Patient
+                </Button>
               </div>
-              <div>
-                <Label htmlFor="roomId">Room ID</Label>
-                <Input
-                  id="roomId"
-                  placeholder="e.g., 101"
-                  value={formData.roomId}
-                  onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
-                />
-              </div>
-              <Button onClick={handleCreate} className="w-full">
-                Create Patient
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -183,9 +212,9 @@ export default function Patients() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center overflow-hidden">
                     {patient.photoUrl ? (
-                      <img 
-                        src={patient.photoUrl} 
-                        alt={patient.name} 
+                      <img
+                        src={patient.photoUrl}
+                        alt={patient.name}
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
@@ -200,6 +229,31 @@ export default function Patients() {
                     <CardTitle className="text-lg">{patient.name}</CardTitle>
                     <CardDescription>Room {patient.roomId}</CardDescription>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setEditFormData({ id: patient.id, name: patient.name, roomId: patient.roomId || "" });
+                          setIsEditDialogOpen(true);
+                        }}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-red-600 focus:text-red-600"
+                        onClick={() => setDeleteConfirmId(patient.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Patient
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardHeader>
               <CardContent>
@@ -222,27 +276,64 @@ export default function Patients() {
                     </div>
                   )}
                   <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 gap-1"
-                      onClick={() => {
-                        setPhotoUploadPersonId(patient.id);
-                        setPhotoUploadPersonName(patient.name);
-                      }}
-                    >
-                      <Camera className="w-3 h-3" />
-                      Enroll Photo
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 gap-1 text-red-600 hover:text-red-700"
-                      onClick={() => setDeleteConfirmId(patient.id)}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
-                    </Button>
+                    {patient.photoUrl ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 gap-1"
+                          >
+                            <Camera className="w-3 h-3" />
+                            Manage Photo
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setPhotoUploadPersonId(patient.id);
+                              setPhotoUploadPersonName(patient.name);
+                            }}
+                          >
+                            <Camera className="mr-2 h-4 w-4" />
+                            Change Photo
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-600"
+                            onClick={async () => {
+                              const toastId = toast.loading("Removing photo...");
+                              try {
+                                await updateMutation.mutateAsync({
+                                  id: patient.id,
+                                  photoUrl: null,
+                                  enrolledFaceDescriptor: null,
+                                });
+                                refetch();
+                                toast.success("Photo removed", { id: toastId });
+                              } catch (e) {
+                                toast.error("Failed to remove photo", { id: toastId });
+                              }
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Photo
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => {
+                          setPhotoUploadPersonId(patient.id);
+                          setPhotoUploadPersonName(patient.name);
+                        }}
+                      >
+                        <Camera className="w-3 h-3" />
+                        Enroll Photo
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -261,7 +352,8 @@ export default function Patients() {
             </Button>
           </CardContent>
         </Card>
-      )}
+      )
+      }
 
       <AlertDialog open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
@@ -283,20 +375,61 @@ export default function Patients() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {photoUploadPersonId && (
-        <PeoplePhotoUpload
-          personId={photoUploadPersonId}
-          personName={photoUploadPersonName}
-          onPhotoEnrolled={handlePhotoEnrolled}
-          isOpen={photoUploadPersonId !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setPhotoUploadPersonId(null);
-              setPhotoUploadPersonName("");
-            }
-          }}
-        />
-      )}
-    </div>
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Patient Details</DialogTitle>
+            <DialogDescription>
+              Update the patient's information below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-name">Patient Name</Label>
+              <Input
+                id="edit-name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-roomId">Room ID</Label>
+              <Input
+                id="edit-roomId"
+                list="available-rooms"
+                value={editFormData.roomId}
+                onChange={(e) => setEditFormData({ ...editFormData, roomId: e.target.value })}
+              />
+            </div>
+            <Button onClick={handleEdit} className="w-full">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {
+        photoUploadPersonId && (
+          <PeoplePhotoUpload
+            personId={photoUploadPersonId}
+            personName={photoUploadPersonName}
+            onPhotoEnrolled={handlePhotoEnrolled}
+            isOpen={photoUploadPersonId !== null}
+            onOpenChange={(open) => {
+              if (!open) {
+                setPhotoUploadPersonId(null);
+                setPhotoUploadPersonName("");
+              }
+            }}
+          />
+        )
+      }
+
+      <datalist id="available-rooms">
+        {rooms?.map((room) => (
+          <option key={room} value={room} />
+        ))}
+      </datalist>
+    </div >
   );
 }

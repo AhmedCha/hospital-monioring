@@ -43,8 +43,13 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string): Promise<User | undefined> {
+  console.log(`[Database] Getting user by openId: ${openId}`);
   const doc = await adminFirestore.collection("users").doc(openId).get();
-  if (!doc.exists) return undefined;
+  if (!doc.exists) {
+    console.log(`[Database] User not found: ${openId}`);
+    return undefined;
+  }
+  console.log(`[Database] User found: ${openId}`);
   return doc.data() as User;
 }
 
@@ -62,11 +67,13 @@ export async function createPerson(data: InsertPerson): Promise<{ id: string }> 
 }
 
 export async function getPeopleByUserId(userId: string, role?: string): Promise<Person[]> {
+  console.log(`[Database] Getting people for user: ${userId}, role: ${role || 'any'}`);
   let query: any = adminFirestore.collection("people").where("userId", "==", userId);
   if (role) {
     query = query.where("role", "==", role);
   }
   const snapshot = await query.get();
+  console.log(`[Database] Found ${snapshot.size} people`);
   return snapshot.docs.map((doc: any) => doc.data() as Person);
 }
 
@@ -94,50 +101,63 @@ export const getPatientById = getPersonById;
 export const updatePatient = updatePerson;
 export const deletePatient = deletePerson;
 
-// --- Detection Events (RTDB for Real-time) ---
+// --- Detection Events (Firestore) ---
 
 export async function logDetectionEvent(data: InsertDetectionEvent): Promise<{ id: string }> {
-  const eventRef = adminDb.ref(`detectionEvents/${data.userId}`).push();
-  const eventId = eventRef.key!;
-  const now = new Date().toISOString();
-  
   const eventData = {
     ...data,
-    id: eventId,
-    timestamp: data.timestamp || now,
-    createdAt: now,
+    timestamp: data.timestamp || new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   };
-
-  await eventRef.set(eventData);
-
-  // Also log to Activity Logs
-  await logToActivity({
-    roomId: data.roomId || "unknown",
-    personId: data.personId || null,
-    activityType: data.eventType,
-    details: data.description || `Severity: ${data.severity}`,
-    timestamp: now,
+  
+  const docRef = await adminFirestore.collection("detectionEvents").add(eventData);
+  
+  // Store in Realtime Database as well for client listeners
+  await adminDb.ref(`detectionEvents/${data.userId}`).push({
+    ...eventData,
+    id: docRef.id
   });
-
-  return { id: eventId };
+  
+  return { id: docRef.id };
 }
 
 export async function getDetectionEventsByUserId(userId: string, limit: number = 100): Promise<DetectionEvent[]> {
-  const snapshot = await adminDb.ref(`detectionEvents/${userId}`)
-    .orderByChild("timestamp")
-    .limitToLast(limit)
-    .once("value");
+  const snapshot = await adminFirestore.collection("detectionEvents")
+    .where("userId", "==", userId)
+    .orderBy("timestamp", "desc")
+    .limit(limit)
+    .get();
+    
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DetectionEvent));
+}
+
+export async function logRoomActivity(data: InsertRoomActivityLog): Promise<{ id: string }> {
+  const activityData = {
+    ...data,
+    timestamp: data.timestamp || new Date().toISOString(),
+  };
   
-  const val = snapshot.val();
-  if (!val) return [];
+  const docRef = await adminFirestore.collection("roomActivityLogs").add(activityData);
   
-  return Object.values(val) as DetectionEvent[];
+  await adminDb.ref(`roomActivityLogs/${data.roomId}`).push({
+    ...activityData,
+    id: docRef.id
+  });
+  
+  return { id: docRef.id };
+}
+
+export async function getRoomActivityLogsByRoomId(roomId: string, limit: number = 50): Promise<RoomActivityLog[]> {
+  const snapshot = await adminFirestore.collection("roomActivityLogs")
+    .where("roomId", "==", roomId)
+    .orderBy("timestamp", "desc")
+    .limit(limit)
+    .get();
+    
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomActivityLog));
 }
 
 export async function getDetectionEventsByPersonId(personId: string, limit: number = 100): Promise<DetectionEvent[]> {
-  // RTDB doesn't support complex filtering well across all users easily without indexing
-  // But we can filter client-side or restructure if needed.
-  // For now, let's assume we query by userId first then filter.
   // Actually, for simplicity, let's use Firestore for events if we need many-to-many filtering.
   // BUT the user wants real-time. Let's keep RTDB and just use a flatter structure if needed.
   
@@ -164,15 +184,21 @@ export const getDetectionEventsByPatientId = getDetectionEventsByPersonId;
 
 export async function createAlertLog(data: InsertAlertLog): Promise<{ id: string }> {
   const now = new Date().toISOString();
-  const res = await adminFirestore.collection("alertLogs").add({
+  const alertData = {
     ...data,
     id: "", // placeholder
     isResolved: 0,
     notificationSent: 0,
     createdAt: now,
     resolvedAt: null,
-  });
+  };
+  const res = await adminFirestore.collection("alertLogs").add(alertData);
+  alertData.id = res.id;
   await res.update({ id: res.id });
+  
+  // Store in Realtime Database as well for client listeners
+  await adminDb.ref(`alertLogs/${data.userId}`).push(alertData);
+  
   return { id: res.id };
 }
 
@@ -193,4 +219,9 @@ async function logToActivity(data: InsertRoomActivityLog): Promise<void> {
     ...data,
     timestamp: data.timestamp || new Date().toISOString(),
   });
+}
+
+export async function getFirebasePatientsMeta(): Promise<any> {
+  const snapshot = await adminDb.ref("patients_meta").once("value");
+  return snapshot.val();
 }

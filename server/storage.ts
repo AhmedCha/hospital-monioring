@@ -14,32 +14,22 @@ function appendHashSuffix(relKey: string): string {
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream",
+  contentType = "image/jpeg",
 ): Promise<{ key: string; url: string }> {
-  const key = appendHashSuffix(normalizeKey(relKey));
-  const bucket = admin.storage().bucket();
-  const file = bucket.file(key);
-
-  try {
-    const buffer = typeof data === "string" ? Buffer.from(data) : Buffer.from(data as any);
-    await file.save(buffer, {
-      metadata: { 
-        contentType,
-        cacheControl: 'public, max-age=31536000'
-      },
-    });
-
-    // Generate a signed URL that effectively never expires
-    const [url] = await file.getSignedUrl({
-      action: 'read',
-      expires: '01-01-2100'
-    });
-
-    return { key, url };
-  } catch (error) {
-    console.error("Firebase storage upload error:", error);
-    throw new Error(`Firebase storage upload failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-  }
+  // BACKUP PLAN: Convert to Base64 Data URL instead of uploading to Firebase Storage
+  // This allows the app to work without a paid Firebase Storage plan.
+  const buffer = typeof data === "string" ? Buffer.from(data) : Buffer.from(data as any);
+  const base64 = buffer.toString("base64");
+  const dataUrl = `data:${contentType};base64,${base64}`;
+  
+  const key = `base64_${Math.random().toString(36).substring(7)}`;
+  
+  console.log(`[Storage] Using Base64 fallback (size: ${Math.round(buffer.length / 1024)}KB)`);
+  
+  return { 
+    key, 
+    url: dataUrl 
+  };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {

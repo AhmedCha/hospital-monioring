@@ -14,6 +14,13 @@ export const peopleRouter = router({
     .input(z.object({ id: z.string() }))
     .query(({ input }) => db.getPersonById(input.id)),
 
+  getRooms: protectedProcedure
+    .query(async ({ ctx }) => {
+      const people = await db.getPeopleByUserId(ctx.user.id);
+      const rooms = Array.from(new Set(people.map((p) => p.roomId).filter(Boolean)));
+      return rooms.sort();
+    }),
+
   create: protectedProcedure
     .input(z.object({
       name: z.string().min(1),
@@ -36,9 +43,9 @@ export const peopleRouter = router({
       name: z.string().optional(),
       role: z.enum(["patient", "doctor", "nurse", "other"]).optional(),
       roomId: z.string().optional().nullable(),
-      photoUrl: z.string().optional(),
-      photoStorageKey: z.string().optional(),
-      enrolledFaceDescriptor: z.unknown().optional(),
+      photoUrl: z.string().optional().nullable(),
+      photoStorageKey: z.string().optional().nullable(),
+      enrolledFaceDescriptor: z.unknown().optional().nullable(),
       isActive: z.number().optional(),
     }))
     .mutation(({ input }) =>
@@ -116,20 +123,13 @@ export const peopleRouter = router({
 
   syncFirebasePatients: protectedProcedure
     .mutation(async ({ ctx }) => {
-      // Since everything is on Firebase now, this sync might be redundant or different
-      // but let's keep it for compatibility with the legacy RTDB patients_meta if it exists
-      const dbUrl = process.env.VITE_FIREBASE_DATABASE_URL;
-      if (!dbUrl) throw new Error("Firebase Database URL not configured");
-
-      const url = `${dbUrl.replace(/\/$/, "")}/patients_meta.json`;
-      const response = await fetch(url);
+      // Since everything is on Firebase now, we use the Admin SDK 
+      // instead of fetch to bypass rules and avoid "Unauthorized" errors.
+      const snapshot = await db.getFirebasePatientsMeta();
       
-      if (!response.ok) {
-        throw new Error(`Firebase fetch failed: ${response.statusText}`);
-      }
+      if (!snapshot) return { success: true, added: 0 };
 
-      const data = await response.json();
-      if (!data) return { success: true, added: 0 };
+      const data = snapshot;
 
       const existingPeople = await db.getPeopleByUserId(ctx.user.id, "patient");
       let added = 0;

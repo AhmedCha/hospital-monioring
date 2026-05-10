@@ -84,7 +84,7 @@ export const appRouter = router({
           eventType: input.eventType,
           severity: input.severity,
           description: input.description ?? null,
-          detectedFaceDescriptor: input.detectedFaceDescriptor,
+          detectedFaceDescriptor: input.detectedFaceDescriptor ?? null,
           matchConfidence: input.matchConfidence ?? null,
           roomId: input.roomId ?? null,
           timestamp: new Date().toISOString(),
@@ -104,7 +104,7 @@ export const appRouter = router({
             message: `Unknown person detected in room ${input.roomId || "unknown"}`,
             roomId: input.roomId ?? null,
           });
-        } else if (input.eventType === "patient absent" && input.severity === "alert") {
+        } else if (input.eventType === "patient absent") {
           await notifyOwner({
             title: "Patient Missing",
             content: `Patient in room ${input.roomId || "unknown"} is no longer detected. Please check immediately.`,
@@ -116,6 +116,26 @@ export const appRouter = router({
             severity: "alert",
             title: "Patient Missing",
             message: `Patient missing from room ${input.roomId || "unknown"}`,
+            roomId: input.roomId ?? null,
+          });
+        } else if (input.eventType === "person recognized") {
+          await db.createAlertLog({
+            userId: ctx.user.id,
+            detectionEventId: event.id,
+            alertType: "person recognized",
+            severity: "info",
+            title: "Known Person Entered",
+            message: input.description || `Known person recognized in room ${input.roomId || "unknown"}`,
+            roomId: input.roomId ?? null,
+          });
+        } else if (input.eventType === "patient present") {
+          await db.createAlertLog({
+            userId: ctx.user.id,
+            detectionEventId: event.id,
+            alertType: "person recognized", // Map to same general type for displaying
+            severity: "info",
+            title: "Patient Present",
+            message: input.description || `Patient confirmed present in room ${input.roomId || "unknown"}`,
             roomId: input.roomId ?? null,
           });
         }

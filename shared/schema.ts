@@ -2,7 +2,7 @@ export type UserRole = "user" | "admin";
 export type PersonRole = "patient" | "doctor" | "nurse" | "other";
 export type EventType = "patient present" | "patient absent" | "unknown person detected" | "person recognized";
 export type Severity = "info" | "warning" | "alert";
-export type AlertType = "unknown person detected" | "patient missing";
+export type AlertType = "unknown person detected" | "patient missing" | "person recognized";
 
 export interface User {
   id: string; // Using string (UID) instead of serial int

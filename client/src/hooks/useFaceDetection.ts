@@ -107,8 +107,8 @@ export function useFaceDetection() {
         }
       });
 
-      // Only return match if confidence is above threshold (0.4 confidence = 0.6 distance)
-      return bestConfidence > 0.4 ? { confidence: bestConfidence, index: bestIndex } : null;
+        // Only return match if confidence is above threshold (0.6 confidence = 0.4 distance)
+        return bestConfidence > 0.6 ? { confidence: bestConfidence, index: bestIndex } : null;
     },
     [compareFaces]
   );

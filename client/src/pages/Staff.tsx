@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, UserRound, Camera, UserPlus } from "lucide-react";
+import { Plus, Trash2, UserRound, Camera, UserPlus, RefreshCw } from "lucide-react";
 
 export default function Staff() {
   const { data: people, isLoading, refetch } = trpc.people.list.useQuery();
   const createMutation = trpc.people.create.useMutation();
   const deleteMutation = trpc.people.delete.useMutation();
+  const updateMutation = trpc.people.update.useMutation();
   const uploadPhotoMutation = trpc.people.uploadPhoto.useMutation();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -168,8 +169,31 @@ export default function Staff() {
                       }}
                     >
                       <Camera className="w-3 h-3" />
-                      Face ID
+                      {person.photoUrl ? "Change" : "Face ID"}
                     </Button>
+                    {person.photoUrl && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-amber-600 hover:bg-amber-50"
+                        onClick={async () => {
+                          const toastId = toast.loading("Removing face data...");
+                          try {
+                            await updateMutation.mutateAsync({
+                              id: person.id,
+                              photoUrl: null,
+                              enrolledFaceDescriptor: null,
+                            });
+                            refetch();
+                            toast.success("Face data removed", { id: toastId });
+                          } catch (e) {
+                            toast.error("Failed to remove data", { id: toastId });
+                          }
+                        }}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"

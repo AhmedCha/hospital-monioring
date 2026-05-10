@@ -10,7 +10,7 @@ import { AlertCircle, Bell, CheckCircle, Search } from "lucide-react";
 export default function Alerts() {
   const { data: alerts, isLoading } = trpc.alerts.list.useQuery();
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterSeverity, setFilterSeverity] = useState<"all" | "warning" | "alert">("all");
+  const [filterSeverity, setFilterSeverity] = useState<"all" | "info" | "warning" | "alert">("all");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "resolved">("active");
 
   const filteredAlerts = alerts?.filter((alert) => {
@@ -18,14 +18,14 @@ export default function Alerts() {
       alert.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       alert.message?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       alert.roomId?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesSeverity = filterSeverity === "all" || alert.severity === filterSeverity;
-    
-    const matchesStatus = 
+
+    const matchesStatus =
       filterStatus === "all" ||
       (filterStatus === "active" && !alert.isResolved) ||
       (filterStatus === "resolved" && alert.isResolved);
-    
+
     return matchesSearch && matchesSeverity && matchesStatus;
   });
 
@@ -103,6 +103,7 @@ export default function Alerts() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Severities</SelectItem>
+                <SelectItem value="info">Info</SelectItem>
                 <SelectItem value="warning">Warning</SelectItem>
                 <SelectItem value="alert">Alert</SelectItem>
               </SelectContent>
@@ -135,32 +136,35 @@ export default function Alerts() {
               {filteredAlerts.map((alert) => (
                 <div
                   key={alert.id}
-                  className={`p-4 rounded-lg border-l-4 transition-colors ${
-                    alert.isResolved
-                      ? "bg-gray-50 border-l-gray-300"
-                      : alert.severity === "alert"
+                  className={`p-4 rounded-lg border-l-4 transition-colors ${alert.isResolved
+                    ? "bg-gray-50 border-l-gray-300"
+                    : alert.severity === "alert"
                       ? "bg-red-50 border-l-red-500"
-                      : "bg-yellow-50 border-l-yellow-500"
-                  }`}
+                      : alert.severity === "info"
+                        ? "bg-blue-50 border-l-blue-500"
+                        : "bg-yellow-50 border-l-yellow-500"
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex-shrink-0 mt-0.5">
                       {alert.isResolved ? (
                         <CheckCircle className="w-5 h-5 text-gray-500" />
                       ) : (
-                        <AlertCircle className={`w-5 h-5 ${alert.severity === "alert" ? "text-red-600" : "text-yellow-600"}`} />
+                        <AlertCircle className={`w-5 h-5 ${alert.severity === "alert" ? "text-red-600" : alert.severity === "info" ? "text-blue-600" : "text-yellow-600"}`} />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold">
-                          {alert.alertType === "unknown person detected" ? "Unknown Person Detected" : "Patient Missing"}
+                          {alert.title || (alert.alertType === "unknown person detected" ? "Unknown Person Detected" : alert.alertType === "person recognized" ? "Known Person Logs" : "Patient Missing")}
                         </h3>
                         <Badge
                           className={
                             alert.severity === "alert"
                               ? "bg-red-100 text-red-800"
-                              : "bg-yellow-100 text-yellow-800"
+                              : alert.severity === "info"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-yellow-100 text-yellow-800"
                           }
                           variant="secondary"
                         >
@@ -173,9 +177,11 @@ export default function Alerts() {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">
-                        {alert.alertType === "unknown person detected"
+                        {alert.message || (alert.alertType === "unknown person detected"
                           ? "An unknown person was detected in a monitored room"
-                          : "A patient was not detected in their monitored room"}
+                          : alert.alertType === "person recognized"
+                            ? "A known person has been detected in a monitored room"
+                            : "A patient was not detected in their monitored room")}
                       </p>
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">
