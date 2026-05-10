@@ -23,11 +23,16 @@ if (!admin.apps.length) {
       }
       
       try {
+        console.log("[Firebase Admin] Attempting to parse service account...");
         const serviceAccount = JSON.parse(saString);
         
-        // Fix for private key newlines if they are escaped in the .env string
+        // Fix for private key newlines
         if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
-          serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+          // If the string literally contains "\n" (escaped), replace it with actual newlines
+          if (serviceAccount.private_key.includes('\\n')) {
+            console.log("[Firebase Admin] Fixing escaped newlines in private key...");
+            serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+          }
         }
 
         admin.initializeApp({
@@ -35,10 +40,14 @@ if (!admin.apps.length) {
           databaseURL: process.env.VITE_FIREBASE_DATABASE_URL,
           storageBucket: ENV.firebaseStorageBucket
         });
-        console.log("[Firebase Admin] Initialization successful via service account.");
+        console.log("[Firebase Admin] Initialization successful.");
       } catch (parseError: any) {
         console.error("[Firebase Admin] JSON Parse failed:", parseError.message);
-        console.error("[Firebase Admin] First 50 chars of string:", saString.substring(0, 50));
+        console.error("[Firebase Admin] Error character at position:", parseError.at || "unknown");
+        // Log the string content in chunks to see exactly what's there
+        for(let i=0; i<saString.length; i+=500) {
+          console.log(`[Firebase Admin] Content chunk ${i/500}:`, saString.substring(i, i+500));
+        }
         throw parseError;
       }
     } else {
