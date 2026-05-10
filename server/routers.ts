@@ -69,9 +69,32 @@ export const appRouter = router({
   patients: peopleRouter, 
 
   events: router({
-    list: protectedProcedure.query(({ ctx }) =>
-      db.getDetectionEventsByUserId(ctx.user.id, 500)
-    ),
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const allEvents = await db.getDetectionEventsByUserId(ctx.user.id, 500);
+      
+      if (ctx.user.role === "admin") return allEvents;
+
+      const allPeople = await db.getPeopleByUserId(ctx.user.id);
+      const meAsPerson = allPeople.find(p => p.email === ctx.user.email);
+      
+      if (!meAsPerson) return [];
+
+      if (ctx.user.role === "doctor") {
+        const myPatientIds = allPeople.filter(p => p.assignedDoctorId === meAsPerson.id).map(p => p.id);
+        return allEvents.filter(e => e.personId && myPatientIds.includes(e.personId));
+      }
+
+      if (ctx.user.role === "nurse") {
+        const myPatientIds = allPeople.filter(p => p.assignedNurseId === meAsPerson.id).map(p => p.id);
+        return allEvents.filter(e => e.personId && myPatientIds.includes(e.personId));
+      }
+
+      if (ctx.user.role === "patient") {
+        return allEvents.filter(e => e.personId === meAsPerson.id);
+      }
+
+      return [];
+    }),
     getByPatient: protectedProcedure
       .input(z.object({ patientId: z.string() }))
       .query(({ input }) => db.getDetectionEventsByPatientId(input.patientId, 500)),
@@ -173,9 +196,43 @@ export const appRouter = router({
   }),
 
   alerts: router({
-    list: protectedProcedure.query(({ ctx }) =>
-      db.getAlertLogsByUserId(ctx.user.id, 500)
-    ),
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const allAlerts = await db.getAlertLogsByUserId(ctx.user.id, 500);
+      
+      if (ctx.user.role === "admin") return allAlerts;
+
+      const allPeople = await db.getPeopleByUserId(ctx.user.id);
+      const meAsPerson = allPeople.find(p => p.email === ctx.user.email);
+      
+      if (!meAsPerson) return [];
+
+      const allEvents = await db.getDetectionEventsByUserId(ctx.user.id, 1000);
+
+      if (ctx.user.role === "doctor") {
+        const myPatientIds = allPeople.filter(p => p.assignedDoctorId === meAsPerson.id).map(p => p.id);
+        return allAlerts.filter(a => {
+          const event = allEvents.find(e => e.id === a.detectionEventId);
+          return event?.personId && myPatientIds.includes(event.personId);
+        });
+      }
+
+      if (ctx.user.role === "nurse") {
+        const myPatientIds = allPeople.filter(p => p.assignedNurseId === meAsPerson.id).map(p => p.id);
+        return allAlerts.filter(a => {
+          const event = allEvents.find(e => e.id === a.detectionEventId);
+          return event?.personId && myPatientIds.includes(event.personId);
+        });
+      }
+
+      if (ctx.user.role === "patient") {
+        return allAlerts.filter(a => {
+          const event = allEvents.find(e => e.id === a.detectionEventId);
+          return event?.personId === meAsPerson.id;
+        });
+      }
+
+      return [];
+    }),
   }),
 });
 

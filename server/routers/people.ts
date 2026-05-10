@@ -6,10 +6,47 @@ import { sendEmail } from "../email";
 
 export const peopleRouter = router({
   list: protectedProcedure
-    .input(z.object({ role: z.enum(["patient", "doctor", "nurse", "other"]).optional() }).optional())
-    .query(({ ctx, input }) =>
-      db.getPeopleByUserId(ctx.user.id, input?.role)
-    ),
+    .query(async ({ ctx }) => {
+      // 1. Find the "Person" record associated with the logged-in user to find their facility/owner
+      const meAsPersonInAnyFacility = await db.getPersonByEmail(ctx.user.email || "");
+      
+      // If we can't find a person record, we might be the Admin themselves
+      const ownerId = meAsPersonInAnyFacility?.userId || ctx.user.id;
+      
+      // 2. Fetch all people belonging to this facility/owner
+      const allPeople = await db.getPeopleByUserId(ownerId);
+      
+      if (ctx.user.role === "admin") {
+        return allPeople;
+      }
+
+      // Find the specific person record for the current user WITHIN this facility
+      const meAsPerson = allPeople.find(p => p.email === ctx.user.email);
+      
+      if (!meAsPerson) {
+        return [];
+      }
+
+      if (ctx.user.role === "doctor") {
+        return allPeople.filter(p => 
+          p.id === meAsPerson.id || // See self
+          (p.role === "patient" && p.assignedDoctorId === meAsPerson.id) // See assigned patients
+        );
+      }
+
+      if (ctx.user.role === "nurse") {
+        return allPeople.filter(p => 
+          p.id === meAsPerson.id || // See self
+          (p.role === "patient" && p.assignedNurseId === meAsPerson.id) // See assigned patients
+        );
+      }
+
+      if (ctx.user.role === "patient") {
+        return allPeople.filter(p => p.id === meAsPerson.id);
+      }
+
+      return [];
+    }),
 
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -34,10 +71,27 @@ export const peopleRouter = router({
       assignedDoctorId: z.string().optional().nullable(),
       assignedNurseId: z.string().optional().nullable(),
     }))
-    .mutation(({ ctx, input }) =>
-      db.createPerson({
-        userId: ctx.user.id,
-        isActive: 1,
+    .mutation(async ({ ctx, input }) => {
+      const isDoctor = ctx.user.role === "doctor";
+      const isAdmin = ctx.user.role === "admin";
+      
+      if (!isAdmin && !isDoctor) {
+        throw new Error("Only admins and doctors can register new patients.");
+      }
+
+      // Find the facility owner (Admin)
+      const meAsPersonInAnyFacility = await db.getPersonByEmail(ctx.user.email || "");
+      const ownerId = meAsPersonInAnyFacility?.userId || ctx.user.id;
+      
+      let assignedDoctorId = input.assignedDoctorId ?? null;
+      
+      // If a doctor is creating, auto-assign them as the doctor
+      if (isDoctor && meAsPersonInAnyFacility) {
+        assignedDoctorId = meAsPersonInAnyFacility.id;
+      }
+
+      return db.createPerson({
+        userId: ownerId, // All records belong to the facility owner
         name: input.name,
         role: input.role,
         email: input.email ?? null,
@@ -45,10 +99,11 @@ export const peopleRouter = router({
         photoUrl: input.photoUrl ?? null,
         photoStorageKey: input.photoStorageKey ?? null,
         enrolledFaceDescriptor: input.enrolledFaceDescriptor ?? null,
-        assignedDoctorId: input.assignedDoctorId ?? null,
+        assignedDoctorId: assignedDoctorId,
         assignedNurseId: input.assignedNurseId ?? null,
-      })
-    ),
+        isActive: 1,
+      });
+    }),
 
   update: protectedProcedure
     .input(z.object({
@@ -64,24 +119,51 @@ export const peopleRouter = router({
       assignedDoctorId: z.string().optional().nullable(),
       assignedNurseId: z.string().optional().nullable(),
     }))
-    .mutation(({ input }) =>
-      db.updatePerson(input.id, {
-        name: input.name,
-        role: input.role,
-        email: input.email,
-        roomId: input.roomId,
-        photoUrl: input.photoUrl,
-        photoStorageKey: input.photoStorageKey,
-        enrolledFaceDescriptor: input.enrolledFaceDescriptor,
-        isActive: input.isActive,
-        assignedDoctorId: input.assignedDoctorId,
-        assignedNurseId: input.assignedNurseId,
-      })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const personToUpdate = await db.getPersonById(input.id);
+      if (!personToUpdate) throw new Error("Person not found");
+
+      const meAsPersonInAnyFacility = await db.getPersonByEmail(ctx.user.email || "");
+      const ownerId = meAsPersonInAnyFacility?.userId || ctx.user.id;
+      const allPeopleInFacility = await db.getPeopleByUserId(ownerId);
+      const meAsPerson = allPeopleInFacility.find(p => p.email === ctx.user.email);
+
+      if (ctx.user.role === "admin") {
+        return db.updatePerson(input.id, {
+          name: input.name,
+          role: input.role,
+          email: input.email === undefined ? undefined : (input.email ?? null),
+          roomId: input.roomId === undefined ? undefined : (input.roomId ?? null),
+          photoUrl: input.photoUrl === undefined ? undefined : (input.photoUrl ?? null),
+          photoStorageKey: input.photoStorageKey === undefined ? undefined : (input.photoStorageKey ?? null),
+          enrolledFaceDescriptor: input.enrolledFaceDescriptor === undefined ? undefined : (input.enrolledFaceDescriptor ?? null),
+          isActive: input.isActive,
+          assignedDoctorId: input.assignedDoctorId === undefined ? undefined : (input.assignedDoctorId ?? null),
+          assignedNurseId: input.assignedNurseId === undefined ? undefined : (input.assignedNurseId ?? null),
+        });
+      }
+
+      if (ctx.user.role === "doctor") {
+        if (meAsPerson && personToUpdate.role === "patient" && personToUpdate.assignedDoctorId === meAsPerson.id) {
+          // Doctors can only update the assigned nurse
+          return db.updatePerson(input.id, {
+            assignedNurseId: input.assignedNurseId === undefined ? undefined : (input.assignedNurseId ?? null),
+          });
+        }
+        throw new Error("You can only manage nurses for your assigned patients.");
+      }
+
+      throw new Error("You do not have permission to update records.");
+    }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => db.deletePerson(input.id)),
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Only admins can remove patients or staff.");
+      }
+      return db.deletePerson(input.id);
+    }),
 
   uploadPhoto: protectedProcedure
     .input(z.object({

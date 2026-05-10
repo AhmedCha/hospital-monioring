@@ -30,7 +30,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       createdAt: now,
       updatedAt: now,
       lastSignedIn: user.lastSignedIn ?? now,
-      role: (user.openId === ENV.ownerOpenId) ? "admin" : (user.role ?? "user"),
+      role: (user.openId === ENV.ownerOpenId) ? "admin" : (user.role ?? "patient"),
     };
     await userRef.set(data);
   } else {
@@ -78,13 +78,20 @@ export async function getPeopleByUserId(userId: string, role?: string): Promise<
   }
   const snapshot = await query.get();
   console.log(`[Database] Found ${snapshot.size} people`);
-  return snapshot.docs.map((doc: any) => doc.data() as Person);
+  return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as Person);
 }
 
 export async function getPersonById(personId: string): Promise<Person | undefined> {
   const doc = await adminFirestore.collection("people").doc(personId).get();
   if (!doc.exists) return undefined;
-  return doc.data() as Person;
+  return { id: doc.id, ...doc.data() } as Person;
+}
+
+export async function getPersonByEmail(email: string): Promise<Person | undefined> {
+  const snapshot = await adminFirestore.collection("people").where("email", "==", email).limit(1).get();
+  if (snapshot.empty) return undefined;
+  const doc = snapshot.docs[0];
+  return { id: doc.id, ...doc.data() } as Person;
 }
 
 export async function updatePerson(personId: string, data: Partial<InsertPerson & { isActive: number }>): Promise<void> {

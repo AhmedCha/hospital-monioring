@@ -12,8 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus, Trash2, UserRound, Camera, UserPlus, RefreshCw, MoreHorizontal, Edit, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function Staff() {
+  const { user } = useAuth();
   const { data: people, isLoading, refetch } = trpc.people.list.useQuery();
   const createMutation = trpc.people.create.useMutation();
   const deleteMutation = trpc.people.delete.useMutation();
@@ -29,6 +31,16 @@ export default function Staff() {
   const [photoUploadPersonName, setPhotoUploadPersonName] = useState<string>("");
 
   const staffMembers = people?.filter(p => p.role === "doctor" || p.role === "nurse") || [];
+  
+  if (user?.role !== "admin") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <AlertCircle className="w-12 h-12 text-amber-500" />
+        <h2 className="text-2xl font-black text-slate-900">Access Restricted</h2>
+        <p className="text-slate-500 font-medium">Only administrators can manage medical staff members.</p>
+      </div>
+    );
+  }
 
   const handleCreate = async () => {
     if (!formData.name) {

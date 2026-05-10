@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 type DetectionStatus = "idle" | "present" | "absent" | "unknown" | "unauthorized";
 
@@ -49,6 +50,7 @@ interface RoomData {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { data: people } = trpc.people.list.useQuery();
   const logEventMutation = trpc.events.log.useMutation();
   const sendEmailMutation = trpc.people.sendAlertEmail.useMutation();
@@ -549,92 +551,94 @@ Please check the monitoring dashboard immediately.
         </div>
 
         <div className="flex items-center gap-3">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="h-12 gap-2 border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
-                <Settings2 className="w-4 h-4 text-slate-500" />
-                <span className="font-semibold text-slate-700">Thresholds</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px] rounded-3xl border-none shadow-2xl">
-              <DialogHeader>
-                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
-                  <BellRing className="w-6 h-6 text-indigo-600" />
-                </div>
-                <DialogTitle className="text-2xl font-black text-slate-900">Monitor Thresholds</DialogTitle>
-                <DialogDescription className="text-slate-500 font-medium">
-                  Define safety boundaries for automated alerting.
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-6 py-6">
-                <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <HeartPulse className="w-4 h-4 text-rose-500" />
-                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Vital Signs</h4>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-end">
-                      <Label className="text-slate-600 font-bold">Heart Rate Range</Label>
-                      <Badge variant="outline" className="bg-white font-mono text-indigo-600 border-indigo-100">
-                        {thresholds.hrMin} - {thresholds.hrMax} BPM
-                      </Badge>
-                    </div>
-                    <Slider 
-                      defaultValue={[thresholds.hrMin, thresholds.hrMax]} 
-                      max={180} min={40} step={1}
-                      onValueChange={([min, max]) => setThresholds(t => ({ ...t, hrMin: min, hrMax: max }))}
-                    />
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <div className="flex justify-between items-end">
-                      <Label className="text-slate-600 font-bold">Min SpO2 Level</Label>
-                      <Badge variant="outline" className="bg-white font-mono text-emerald-600 border-emerald-100">
-                        {thresholds.spo2Min}%
-                      </Badge>
-                    </div>
-                    <Slider 
-                      defaultValue={[thresholds.spo2Min]} 
-                      max={100} min={85} step={1}
-                      onValueChange={([val]) => setThresholds(t => ({ ...t, spo2Min: val }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Thermometer className="w-4 h-4 text-amber-500" />
-                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Environment</h4>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-end">
-                      <Label className="text-slate-600 font-bold">Temperature Range</Label>
-                      <Badge variant="outline" className="bg-white font-mono text-amber-600 border-amber-100">
-                        {thresholds.tempMin}° - {thresholds.tempMax}°C
-                      </Badge>
-                    </div>
-                    <Slider 
-                      defaultValue={[thresholds.tempMin, thresholds.tempMax]} 
-                      max={45} min={15} step={0.5}
-                      onValueChange={([min, max]) => setThresholds(t => ({ ...t, tempMin: min, tempMax: max }))}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button 
-                  className="w-full h-12 bg-slate-900 hover:bg-black rounded-xl font-bold" 
-                  onClick={() => toast.success("Thresholds synchronized successfully")}
-                >
-                  Save Monitoring Protocol
+          {(user?.role === "admin" || user?.role === "doctor") && (
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="h-12 gap-2 border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                  <Settings2 className="w-4 h-4 text-slate-500" />
+                  <span className="font-semibold text-slate-700">Thresholds</span>
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[450px] rounded-3xl border-none shadow-2xl">
+                <DialogHeader>
+                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                    <BellRing className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <DialogTitle className="text-2xl font-black text-slate-900">Monitor Thresholds</DialogTitle>
+                  <DialogDescription className="text-slate-500 font-medium">
+                    Define safety boundaries for automated alerting.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-6 py-6">
+                  <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <HeartPulse className="w-4 h-4 text-rose-500" />
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Vital Signs</h4>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-end">
+                        <Label className="text-slate-600 font-bold">Heart Rate Range</Label>
+                        <Badge variant="outline" className="bg-white font-mono text-indigo-600 border-indigo-100">
+                          {thresholds.hrMin} - {thresholds.hrMax} BPM
+                        </Badge>
+                      </div>
+                      <Slider 
+                        defaultValue={[thresholds.hrMin, thresholds.hrMax]} 
+                        max={180} min={40} step={1}
+                        onValueChange={([min, max]) => setThresholds(t => ({ ...t, hrMin: min, hrMax: max }))}
+                      />
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <div className="flex justify-between items-end">
+                        <Label className="text-slate-600 font-bold">Min SpO2 Level</Label>
+                        <Badge variant="outline" className="bg-white font-mono text-emerald-600 border-emerald-100">
+                          {thresholds.spo2Min}%
+                        </Badge>
+                      </div>
+                      <Slider 
+                        defaultValue={[thresholds.spo2Min]} 
+                        max={100} min={85} step={1}
+                        onValueChange={([val]) => setThresholds(t => ({ ...t, spo2Min: val }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Thermometer className="w-4 h-4 text-amber-500" />
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Environment</h4>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-end">
+                        <Label className="text-slate-600 font-bold">Temperature Range</Label>
+                        <Badge variant="outline" className="bg-white font-mono text-amber-600 border-amber-100">
+                          {thresholds.tempMin}° - {thresholds.tempMax}°C
+                        </Badge>
+                      </div>
+                      <Slider 
+                        defaultValue={[thresholds.tempMin, thresholds.tempMax]} 
+                        max={45} min={15} step={0.5}
+                        onValueChange={([min, max]) => setThresholds(t => ({ ...t, tempMin: min, tempMax: max }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button 
+                    className="w-full h-12 bg-slate-900 hover:bg-black rounded-xl font-bold" 
+                    onClick={() => toast.success("Thresholds synchronized successfully")}
+                  >
+                    Save Monitoring Protocol
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 

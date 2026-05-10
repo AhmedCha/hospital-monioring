@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Trash2, User, Camera, RefreshCw, MoreHorizontal, Edit } from "lucide-react";
+import { Plus, Trash2, User, Camera, RefreshCw, MoreHorizontal, Edit, UserPlus } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function Patients() {
+  const { user } = useAuth();
   const { data: people, isLoading, refetch } = trpc.people.list.useQuery();
   const createMutation = trpc.people.create.useMutation();
   const deleteMutation = trpc.people.delete.useMutation();
@@ -44,6 +46,7 @@ export default function Patients() {
     id: "", 
     name: "", 
     roomId: "", 
+    email: "",
     assignedDoctorId: "none", 
     assignedNurseId: "none" 
   });
@@ -255,60 +258,63 @@ export default function Patients() {
         </div>
       ) : patients.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {patients.map((patient) => (
-            <Card key={patient.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center overflow-hidden">
-                    {patient.photoUrl ? (
-                      <img
-                        src={patient.photoUrl}
-                        alt={patient.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          // Could trigger a state update here if we wanted to show a specific icon
-                        }}
-                      />
-                    ) : (
-                      <User className="w-5 h-5 text-white" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{patient.name}</CardTitle>
-                    <CardDescription>Room {patient.roomId}</CardDescription>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setEditFormData({ 
-                            id: patient.id, 
-                            name: patient.name, 
-                            roomId: patient.roomId || "",
-                            assignedDoctorId: patient.assignedDoctorId || "none",
-                            assignedNurseId: patient.assignedNurseId || "none"
-                          });
-                          setIsEditDialogOpen(true);
-                        }}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-red-600 focus:text-red-600"
-                        onClick={() => setDeleteConfirmId(patient.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete Patient
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+              {patients.map((patient) => (
+                <Card key={patient.id} className="group hover:shadow-xl transition-all duration-300 border-slate-100 overflow-hidden rounded-3xl bg-white/50 backdrop-blur-sm">
+                  <CardHeader className="pb-3 border-b border-slate-50 bg-slate-50/30">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100 overflow-hidden">
+                        {patient.photoUrl ? (
+                          <img
+                            src={patient.photoUrl}
+                            alt={patient.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <User className="text-white w-6 h-6" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-lg font-black text-slate-900 leading-none mb-1">{patient.name}</CardTitle>
+                        <CardDescription className="font-bold text-indigo-600 text-xs tracking-widest uppercase">Room {patient.roomId}</CardDescription>
+                      </div>
+                  {user?.role !== "nurse" && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="rounded-xl">
+                          <DropdownMenuItem key="edit" onClick={() => {
+                            setEditFormData({ 
+                              id: patient.id, 
+                              name: patient.name, 
+                              roomId: patient.roomId || "", 
+                              email: patient.email || "",
+                              assignedDoctorId: patient.assignedDoctorId || "none",
+                              assignedNurseId: patient.assignedNurseId || "none"
+                            });
+                            setIsEditDialogOpen(true);
+                          }}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          {user?.role === "admin" ? "Edit Profile" : "Manage Assignments"}
+                        </DropdownMenuItem>
+                        {user?.role === "admin" && (
+                          <DropdownMenuItem 
+                            key="delete"
+                            className="text-red-600 focus:text-red-600" 
+                            onClick={() => setDeleteConfirmId(patient.id)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove Patient
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -453,56 +459,64 @@ export default function Patients() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="edit-name">Patient Name</Label>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name" className="text-xs font-bold uppercase text-slate-500">Full Name</Label>
               <Input
                 id="edit-name"
                 value={editFormData.name}
                 onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                className="h-11 rounded-xl border-slate-200"
+                disabled={user?.role !== "admin"}
               />
             </div>
-            <div>
-              <Label htmlFor="edit-roomId">Room ID</Label>
+            <div className="space-y-2">
+              <Label htmlFor="edit-roomId" className="text-xs font-bold uppercase text-slate-500">Assigned Room</Label>
               <Input
                 id="edit-roomId"
-                list="available-rooms"
                 value={editFormData.roomId}
                 onChange={(e) => setEditFormData({ ...editFormData, roomId: e.target.value })}
+                className="h-11 rounded-xl border-slate-200"
+                disabled={user?.role !== "admin"}
               />
             </div>
-            <div>
-              <Label>Assigned Doctor</Label>
-              <Select 
-                value={editFormData.assignedDoctorId} 
-                onValueChange={(val) => setEditFormData({ ...editFormData, assignedDoctorId: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Doctor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {people?.filter(p => p.role === "doctor").map(doc => (
-                    <SelectItem key={doc.id} value={doc.id}>{doc.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Assigned Nurse</Label>
-              <Select 
-                value={editFormData.assignedNurseId} 
-                onValueChange={(val) => setEditFormData({ ...editFormData, assignedNurseId: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Nurse" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {people?.filter(p => p.role === "nurse").map(nurse => (
-                    <SelectItem key={nurse.id} value={nurse.id}>{nurse.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Primary Doctor</Label>
+                <Select
+                  value={editFormData.assignedDoctorId}
+                  onValueChange={(val) => setEditFormData({ ...editFormData, assignedDoctorId: val })}
+                  disabled={user?.role !== "admin"}
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-slate-200">
+                    <SelectValue placeholder="Assign Doctor" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none">No Assignment</SelectItem>
+                    {people?.filter(p => p.role === "doctor").map(d => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Assigned Nurse</Label>
+                <Select
+                  value={editFormData.assignedNurseId}
+                  onValueChange={(val) => setEditFormData({ ...editFormData, assignedNurseId: val })}
+                  disabled={user?.role !== "admin" && user?.role !== "doctor"}
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-slate-200">
+                    <SelectValue placeholder="Assign Nurse" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none">No Assignment</SelectItem>
+                    {people?.filter(p => p.role === "nurse").map(n => (
+                      <SelectItem key={n.id} value={n.id}>{n.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <Button onClick={handleEdit} className="w-full">
               Save Changes
@@ -529,8 +543,8 @@ export default function Patients() {
       }
 
       <datalist id="available-rooms">
-        {rooms?.map((room) => (
-          <option key={room} value={room} />
+        {[...new Set(rooms)].map((room) => (
+          <option key={`room-${room}`} value={room} />
         ))}
       </datalist>
     </div >

@@ -30,11 +30,11 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Users, label: "Patients", path: "/patients" },
-  { icon: UserRound, label: "Staff Members", path: "/staff" },
-  { icon: History, label: "Activity Logs", path: "/events" },
-  { icon: ShieldAlert, label: "Security Alerts", path: "/alerts" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", roles: ["admin", "doctor", "nurse", "patient"] },
+  { icon: Users, label: "Patients", path: "/patients", roles: ["admin", "doctor", "nurse"] },
+  { icon: UserRound, label: "Staff Members", path: "/staff", roles: ["admin"] },
+  { icon: History, label: "Activity Logs", path: "/events", roles: ["admin", "doctor", "nurse", "patient"] },
+  { icon: ShieldAlert, label: "Security Alerts", path: "/alerts", roles: ["admin", "doctor", "nurse", "patient"] },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -110,26 +110,6 @@ export default function DashboardLayout({
               Sign in
             </Button>
           </div>
-
-          <div className="relative w-full">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          <Button
-            onClick={login}
-            variant="outline"
-            size="lg"
-            className="w-full"
-          >
-            Sign in with Google
-          </Button>
         </div>
       </div>
     );
@@ -165,7 +145,12 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  
+  const filteredMenuItems = menuItems.filter(item => 
+    item.roles.includes(user?.role || "")
+  );
+
+  const activeMenuItem = filteredMenuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -233,20 +218,25 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {filteredMenuItems.map(item => {
                 const isActive = location === item.path;
+                let label = item.label;
+                if (user?.role === "doctor" && item.path === "/patients") {
+                  label = "My Patients";
+                }
+                
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
+                      tooltip={label}
                       className={`h-10 transition-all font-normal`}
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
                       />
-                      <span>{item.label}</span>
+                      <span>{label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -264,9 +254,14 @@ function DashboardLayoutContent({
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
-                      {user?.name || "-"}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate leading-none">
+                        {user?.name || "-"}
+                      </p>
+                      <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                        {user?.role}
+                      </span>
+                    </div>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
                       {user?.email || "-"}
                     </p>

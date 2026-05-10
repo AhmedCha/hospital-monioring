@@ -1,4 +1,4 @@
-export type UserRole = "user" | "admin";
+export type UserRole = "admin" | "doctor" | "nurse" | "patient";
 export type PersonRole = "patient" | "doctor" | "nurse" | "other";
 export type EventType = "patient present" | "patient absent" | "unknown person detected" | "person recognized";
 export type Severity = "info" | "warning" | "alert";
