@@ -34,7 +34,12 @@ export const peopleRouter = router({
       db.createPerson({
         userId: ctx.user.id,
         isActive: 1,
-        ...input,
+        name: input.name,
+        role: input.role,
+        roomId: input.roomId ?? null,
+        photoUrl: input.photoUrl ?? null,
+        photoStorageKey: input.photoStorageKey ?? null,
+        enrolledFaceDescriptor: input.enrolledFaceDescriptor ?? null,
       })
     ),
 
