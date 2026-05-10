@@ -43,7 +43,6 @@ lerna-debug.log*
 pids
 *.pid
 *.seed
->>>>>>> patient-monitor-local/master
 *.pid.lock
 *.bak
 
@@ -112,4 +111,3 @@ temp/
 
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
->>>>>>> patient-monitor-local/master
