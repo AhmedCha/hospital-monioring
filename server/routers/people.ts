@@ -2,6 +2,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
 import { storagePut } from "../storage";
+import { sendEmail } from "../email";
 
 export const peopleRouter = router({
   list: protectedProcedure
@@ -196,13 +197,11 @@ export const peopleRouter = router({
       message: z.string(),
     }))
     .mutation(async ({ input }) => {
-      // For now, we log it. We'll implement actual mailing if requested.
-      console.log(`[Email Alert] To: ${input.recipientEmail}`);
-      console.log(`[Email Alert] Subject: ${input.subject}`);
-      console.log(`[Email Alert] Message: ${input.message}`);
-      
-      // MOCK: In a real app, use Nodemailer or SendGrid here
-      return { success: true };
+      return await sendEmail({
+        to: input.recipientEmail,
+        subject: input.subject,
+        text: input.message,
+      });
     }),
 });
 

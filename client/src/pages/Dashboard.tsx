@@ -122,22 +122,27 @@ Please check the monitoring dashboard immediately.
     if (vitals) {
       if (vitals.heartRate > thresholds.hrMax && (now - (lastEventTimeRef.current['hr-high'] || 0) > alertThrottle)) {
         toast.error(`Critical Heart Rate: ${vitals.heartRate} BPM (High)`, { duration: 5000 });
+        if (now - (lastEmailTimeRef.current['hr-high'] || 0) > EMAIL_COOLDOWN) {
+          sendEmailAlert("Critical Heart Rate", `Heart rate reached ${vitals.heartRate} BPM, exceeding the safe limit of ${thresholds.hrMax} BPM.`);
+          lastEmailTimeRef.current['hr-high'] = now;
+        }
         lastEventTimeRef.current['hr-high'] = now;
       }
       if (vitals.heartRate < thresholds.hrMin && (now - (lastEventTimeRef.current['hr-low'] || 0) > alertThrottle)) {
         toast.error(`Critical Heart Rate: ${vitals.heartRate} BPM (Low)`, { duration: 5000 });
+        if (now - (lastEmailTimeRef.current['hr-low'] || 0) > EMAIL_COOLDOWN) {
+          sendEmailAlert("Critical Heart Rate", `Heart rate dropped to ${vitals.heartRate} BPM, below the safe limit of ${thresholds.hrMin} BPM.`);
+          lastEmailTimeRef.current['hr-low'] = now;
+        }
         lastEventTimeRef.current['hr-low'] = now;
       }
       if (vitals.spO2 < thresholds.spo2Min && (now - (lastEventTimeRef.current['spo2-low'] || 0) > alertThrottle)) {
         toast.error(`Low Oxygen Saturation: ${vitals.spO2}%`, { duration: 5000 });
-        sendEmailAlert("Critical SpO2 Level", `Oxygen saturation dropped to ${vitals.spO2}%, which is below the safe threshold of ${thresholds.spo2Min}%.`);
+        if (now - (lastEmailTimeRef.current['spo2-low'] || 0) > EMAIL_COOLDOWN) {
+          sendEmailAlert("Critical SpO2 Level", `Oxygen saturation dropped to ${vitals.spO2}%, which is below the safe threshold of ${thresholds.spo2Min}%.`);
+          lastEmailTimeRef.current['spo2-low'] = now;
+        }
         lastEventTimeRef.current['spo2-low'] = now;
-      }
-      if (vitals.heartRate > thresholds.hrMax && (now - (lastEventTimeRef.current['hr-high'] || 0) > alertThrottle)) {
-        sendEmailAlert("Critical Heart Rate", `Heart rate reached ${vitals.heartRate} BPM, exceeding the safe limit of ${thresholds.hrMax} BPM.`);
-      }
-      if (vitals.heartRate < thresholds.hrMin && (now - (lastEventTimeRef.current['hr-low'] || 0) > alertThrottle)) {
-        sendEmailAlert("Critical Heart Rate", `Heart rate dropped to ${vitals.heartRate} BPM, below the safe limit of ${thresholds.hrMin} BPM.`);
       }
     }
 
@@ -158,7 +163,16 @@ Please check the monitoring dashboard immediately.
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastEventTimeRef = useRef<{ [key: string]: number }>({});
+  const lastEmailTimeRef = useRef<{ [key: string]: number }>({});
   const lastFaceSeenTimeRef = useRef<number>(0);
+
+  // Alert Stabilization Counters
+  const absenceCounterRef = useRef<number>(0);
+  const unknownCounterRef = useRef<{ [key: string]: number }>({});
+  const unauthCounterRef = useRef<{ [key: string]: number }>({});
+
+  const EMAIL_COOLDOWN = 15 * 60 * 1000; // 15 minutes
+  const STABILITY_THRESHOLD = 5; // Must be consistent for 5 frames (~3 seconds)
 
   const { modelsLoaded, detectFaces, findBestMatch } = useFaceDetection();
 
@@ -350,32 +364,13 @@ Please check the monitoring dashboard immediately.
           setConfidenceScore(0);
           setLastDetectionTime(new Date());
           setCurrentlyInRoom([]);
-
-          // Clear canvas after 3 seconds of no faces
-          if (now - lastFaceSeenTimeRef.current > 3000) {
-            const ctx = canvasRef.current.getContext("2d");
-            if (ctx) {
-              ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-            }
-          }
-
-          const lastAbsenceTime = lastEventTimeRef.current["absence"] || 0;
-          if (now - lastAbsenceTime > 60000) {
-            await logEventMutation.mutateAsync({
-              personId: selectedPatient.id,
-              eventType: "patient absent",
-              severity: "warning",
-              roomId: selectedPatient.roomId || "unknown",
-              description: "Patient not detected in camera frame",
-            });
-            sendEmailAlert("Patient Missing", `The patient is no longer detected by the room camera. Immediate room check required.`);
-            lastEventTimeRef.current["absence"] = now;
-          }
         } else {
           lastFaceSeenTimeRef.current = now;
           let isPatientInFrame = false;
           let patientConfidence = 0;
           let unknownCount = 0;
+          const seenIds = new Set<string>();
+          const seenUnknown = { global: false };
 
           const ctx = canvasRef.current.getContext("2d");
           if (ctx) {
@@ -397,48 +392,44 @@ Please check the monitoring dashboard immediately.
               personRole = person.role;
               
               if (person.id === selectedPatient.id) {
-                isAuthorized = true;
-              } else {
-                const authorizedIds = [
-                  selectedPatient.assignedDoctorId,
-                  selectedPatient.assignedNurseId
-                ].filter(Boolean);
-                isAuthorized = authorizedIds.includes(person.id);
-              }
-
-              recognizedInFrame.push({ name: person.name, role: person.role, isAuthorized });
-
-              if (person.id === selectedPatient.id) {
                 isPatientInFrame = true;
                 patientConfidence = match.confidence;
                 color = "#10b981";
               } else {
+                seenIds.add(person.id);
                 const authorizedIds = [
                   selectedPatient.assignedDoctorId,
                   selectedPatient.assignedNurseId
                 ].filter(Boolean);
-
                 const isAuthorized = authorizedIds.includes(person.id);
 
-                if (isAuthorized) {
-                  color = "#6366f1"; // Indigo for authorized staff
-                } else {
-                  color = "#f43f5e"; // Rose for unauthorized
-                  const lastUnauthTime = lastEventTimeRef.current[`unauth-${person.id}`] || 0;
-                  if (now - lastUnauthTime > 120000) {
-                    await logEventMutation.mutateAsync({
-                      personId: person.id,
-                      eventType: "person recognized",
-                      severity: "alert",
-                      roomId: selectedPatient.roomId || "unknown",
-                      description: `Unauthorized person ${person.name} (${person.role}) entered the room.`,
-                      isAuthorized: 0
-                    });
-                    sendEmailAlert("Unauthorized Entry", `${person.name} (${person.role}) has entered ${selectedPatient.name}'s room but is not assigned to this patient.`);
-                    lastEventTimeRef.current[`unauth-${person.id}`] = now;
+                if (!isAuthorized) {
+                  // Unauthorized Recognition Stabilization
+                  unauthCounterRef.current[person.id] = (unauthCounterRef.current[person.id] || 0) + 1;
+
+                  if (unauthCounterRef.current[person.id] >= STABILITY_THRESHOLD) {
+                    const lastUnauthTime = lastEventTimeRef.current[`unauth-${person.id}`] || 0;
+                    if (now - lastUnauthTime > 120000) {
+                      await logEventMutation.mutateAsync({
+                        personId: person.id,
+                        eventType: "person recognized",
+                        severity: "alert",
+                        roomId: selectedPatient.roomId || "unknown",
+                        description: `Unauthorized person ${person.name} (${person.role}) entered the room.`,
+                        isAuthorized: 0
+                      });
+
+                      if (now - (lastEmailTimeRef.current[`unauth-${person.id}`] || 0) > EMAIL_COOLDOWN) {
+                        sendEmailAlert("Unauthorized Entry", `${person.name} (${person.role}) has entered ${selectedPatient.name}'s room but is not assigned to this patient.`);
+                        lastEmailTimeRef.current[`unauth-${person.id}`] = now;
+                      }
+                      lastEventTimeRef.current[`unauth-${person.id}`] = now;
+                    }
                   }
                 }
               }
+              
+              recognizedInFrame.push({ name: person.name, role: person.role, isAuthorized: person.id === selectedPatient.id || isAuthorized });
 
               const lastRecTime = lastEventTimeRef.current[`rec-${person.id}`] || 0;
               if (now - lastRecTime > 120000) {
@@ -453,17 +444,28 @@ Please check the monitoring dashboard immediately.
               }
             } else {
               unknownCount++;
-              const lastUnknownTime = lastEventTimeRef.current["unknown"] || 0;
-              if (now - lastUnknownTime > 30000) {
-                await logEventMutation.mutateAsync({
-                  eventType: "unknown person detected",
-                  severity: "alert",
-                  roomId: selectedPatient.roomId || "unknown",
-                  description: "Unauthorized person detected in room.",
-                  isAuthorized: 0
-                });
-                sendEmailAlert("Unknown Person Detected", `An unidentified individual has been detected in ${selectedPatient.name}'s room.`);
-                lastEventTimeRef.current["unknown"] = now;
+              seenUnknown.global = true;
+              
+              // Unknown Stabilization
+              unknownCounterRef.current["global"] = (unknownCounterRef.current["global"] || 0) + 1;
+
+              if (unknownCounterRef.current["global"] >= STABILITY_THRESHOLD) {
+                const lastUnknownTime = lastEventTimeRef.current["unknown"] || 0;
+                if (now - lastUnknownTime > 30000) {
+                  await logEventMutation.mutateAsync({
+                    eventType: "unknown person detected",
+                    severity: "alert",
+                    roomId: selectedPatient.roomId || "unknown",
+                    description: "Unauthorized person detected in room.",
+                    isAuthorized: 0
+                  });
+
+                  if (now - (lastEmailTimeRef.current['unknown'] || 0) > EMAIL_COOLDOWN) {
+                    sendEmailAlert("Unknown Person Detected", `An unidentified individual has been detected in ${selectedPatient.name}'s room.`);
+                    lastEmailTimeRef.current['unknown'] = now;
+                  }
+                  lastEventTimeRef.current["unknown"] = now;
+                }
               }
             }
 
@@ -484,19 +486,42 @@ Please check the monitoring dashboard immediately.
             recognizedInFrame.push({ name: "Unknown Person", role: "unknown", isAuthorized: false });
           }
 
+          // Reset counters for those not seen
+          for (const id in unauthCounterRef.current) {
+            if (!seenIds.has(id)) unauthCounterRef.current[id] = 0;
+          }
+          if (!seenUnknown.global) unknownCounterRef.current["global"] = 0;
+
           setCurrentlyInRoom(recognizedInFrame);
           
-          const hasUnauthorized = recognizedInFrame.some(p => !p.isAuthorized);
-
-          if (hasUnauthorized) {
-            setDetectionStatus("unauthorized");
-            setConfidenceScore(0);
-          } else if (isPatientInFrame) {
+          if (isPatientInFrame) {
             setDetectionStatus("present");
             setConfidenceScore(patientConfidence);
+            absenceCounterRef.current = 0;
           } else {
             setDetectionStatus("absent");
             setConfidenceScore(0);
+            
+            // Patient Absence Stabilization
+            absenceCounterRef.current++;
+            if (absenceCounterRef.current >= STABILITY_THRESHOLD) {
+              const lastAbsenceTime = lastEventTimeRef.current["absence"] || 0;
+              if (now - lastAbsenceTime > 60000) {
+                await logEventMutation.mutateAsync({
+                  personId: selectedPatient.id,
+                  eventType: "patient absent",
+                  severity: "warning",
+                  roomId: selectedPatient.roomId || "unknown",
+                  description: "Patient not detected in camera frame",
+                });
+                
+                if (now - (lastEmailTimeRef.current['absence'] || 0) > EMAIL_COOLDOWN) {
+                  sendEmailAlert("Patient Missing", `The patient is no longer detected by the room camera. Immediate room check required.`);
+                  lastEmailTimeRef.current['absence'] = now;
+                }
+                lastEventTimeRef.current["absence"] = now;
+              }
+            }
           }
           setLastDetectionTime(new Date());
         }
@@ -880,19 +905,16 @@ Please check the monitoring dashboard immediately.
               <div className="flex items-center gap-4 py-2">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
                   detectionStatus === 'present' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' :
-                  detectionStatus === 'unauthorized' ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse' :
                   detectionStatus === 'absent' && isStreaming ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' :
                   'bg-slate-100 text-slate-400'
                 }`}>
                   {detectionStatus === 'present' ? <CheckCircle className="w-7 h-7" /> :
-                   detectionStatus === 'unauthorized' ? <AlertCircle className="w-7 h-7" /> :
                    detectionStatus === 'absent' && isStreaming ? <Clock className="w-7 h-7" /> :
                    <Camera className="w-7 h-7" />}
                 </div>
                 <div>
                   <h4 className="text-xl font-black text-slate-900 leading-tight">
                     {detectionStatus === 'present' ? "Present" :
-                     detectionStatus === 'unauthorized' ? "Unauthorized" :
                      detectionStatus === 'absent' && isStreaming ? "Absent" : "Standby"}
                   </h4>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
