@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "server/_core/index.ts",
+      "src": "api/index.ts",
       "use": "@vercel/node"
     },
     {
@@ -16,11 +16,11 @@
   "rewrites": [
     {
       "source": "/api/trpc/(.*)",
-      "destination": "/server/_core/index.ts"
+      "destination": "/api/index.ts"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/server/_core/index.ts"
+      "destination": "/api/index.ts"
     },
     {
       "source": "/(.*)",
