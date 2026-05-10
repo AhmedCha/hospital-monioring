@@ -1,0 +1,168 @@
+\chapter{Methodology}
+
+\section{System Design}
+
+\subsection{Embedded Subsystem (ESP32)}
+
+\subsubsection{Heart Rate}
+
+Heart rate is derived from the photoplethysmography (PPG) infrared signal by detecting
+peaks in the waveform — each peak corresponding to one cardiac cycle.
+
+\subsubsection{SpO\textsubscript{2}}
+
+Blood oxygen saturation is estimated by pulse oximetry, exploiting the difference in
+optical absorption between oxyhaemoglobin (HbO\textsubscript{2}) and deoxyhaemoglobin
+(Hb) at two wavelengths.
+
+\subsubsection{Delta-Threshold Upload Filter}
+
+Records are enqueued only when the measured value has changed by more than a defined
+threshold since the last successful push.
+Let $x_n$ be the current reading and $\hat{x}$ the last transmitted value.
+The upload condition for room data is:
+
+\begin{equation}
+	\text{Upload}_{\text{room}} \;\Leftrightarrow\;
+	\left| T_n - \hat{T} \right| > \delta_T \;\lor\;
+	\left| H_n - \hat{H} \right| > \delta_H
+	\label{eq:room_thresh}
+\end{equation}
+
+with $\delta_T = 0.3$\,°C and $\delta_H = 0.5$\,\%.
+For patient data:
+
+\begin{equation}
+	\text{Upload}_{\text{patient}} \;\Leftrightarrow\;
+	\text{BPM}_n \neq \hat{\text{BPM}} \;\lor\;
+	\left| \text{SpO}_{2,n} - \widehat{\text{SpO}_2} \right| > \delta_S
+	\label{eq:patient_thresh}
+\end{equation}
+
+with $\delta_S = 2$\,\%.
+Both conditions are evaluated every $T_{\text{interval}} = 1\,000$\,ms.
+
+\subsubsection{End-to-End Latency Model}
+
+The total latency from sensor event to database record is:
+
+\begin{equation}
+	L_{\text{total}} = T_{\text{acq}} + T_{\text{proc}} + T_{\text{serial}} +
+	T_{\text{TLS}} + T_{\text{RTT}}
+	\label{eq:latency}
+\end{equation}
+
+where:
+\begin{itemize}
+	\item $T_{\text{acq}}$: sensor acquisition time (DHT22: up to 2\,000\,ms;
+	      MAX30102: continuous FIFO drain, $\approx$25\,ms per sample at default rate).
+	\item $T_{\text{proc}}$: local computation ($<$5\,ms per SpO\textsubscript{2}
+	      update; $<$1\,ms for BPM average).
+	\item $T_{\text{serial}}$: JSON string build ($<$1\,ms).
+	\item $T_{\text{TLS}}$: TLS handshake on first connection (1--3\,s);
+	      session reuse on subsequent requests ($<$5\,ms).
+	\item $T_{\text{RTT}}$: HTTPS round-trip to Firebase
+	      ($\approx$100--300\,ms over 2.4\,GHz Wi-Fi).
+\end{itemize}
+
+\subsubsection{Key Assumptions}
+
+\begin{itemize}
+	\item 32-bit aligned float reads and writes are atomic on the ESP32
+	      architecture, making inter-core sharing of \texttt{float} globals safe for
+	      single-writer/single-reader access without a mutex.
+	\item Server-side timestamps (\texttt{".sv":"timestamp"}) eliminate the need
+	      for an RTC on the device.
+	\item A finger is considered present when the IR raw value exceeds 50\,000 counts;
+	      below this threshold BPM and SpO\textsubscript{2} are reset to zero.
+\end{itemize}
+
+% -------------------------------------------------------
+% TODO (Backend Team): add alert threshold model, API
+% design rationale, and authentication flow.
+% -------------------------------------------------------
+\subsection{Backend Subsystem}
+\begin{center}
+	\textit{[To be completed by the backend team: alert logic, threshold model,
+				authentication flow, and API design rationale.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): add component architecture,
+% real-time update mechanism, chart rendering approach.
+% -------------------------------------------------------
+\subsection{Web Dashboard Subsystem}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): add problem formulation, model
+% architecture, feature engineering, loss function,
+% training strategy.
+% -------------------------------------------------------
+
+\subsection{AI Subsystem}
+\begin{center}
+	\textit{[To be completed by the AI team.]}
+\end{center}
+
+% ============================================================
+\section{Methodology Diagram}
+% ============================================================
+
+Figure~\ref{fig:methodology} presents the overall development methodology for the
+complete system, from initial design through to deployment.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{methodology_diagram.png}
+	\caption{Overall development methodology.}
+	\label{fig:methodology}
+\end{figure}
+
+% flowchart TD
+%     %% Main Phases
+%     P1["1. System Design"]
+%     P2["2. Implementation"]
+%     P3["3. Debug Build"]
+%     P4["4. Validation"]
+%     P5["5. Release Build"]
+%     P6["6. Integration"]
+%     P7["7. Deployment"]
+%
+%     %% Sub-descriptions
+%     D1["Architecture, math model, pseudocode, schematics"]
+%     D2["Firmware, backend, web app, AI model"]
+%     D3["--debug build, serial + API logs"]
+%     D4["Sensor accuracy, latency, API tests, AI metrics"]
+%     D5["Production build, no serial overhead"]
+%     D6["End-to-end test:<br>ESP32 -> DB -> Dashboard -> AI"]
+%     D7["Flash + configure via AP, go live"]
+%
+%     %% Main sequential flow
+%     P1 --> P2
+%     P2 --> P3
+%     P3 --> P4
+%     P4 --> P5
+%     P5 --> P6
+%     P6 --> P7
+%
+%     %% Feedback loop
+%     P4 -- "fix & re-implement" --> P2
+%
+%     %% Dashed connections to sub-descriptions
+%     P1 -.-> D1
+%     P2 -.-> D2
+%     P3 -.-> D3
+%     P4 -.-> D4
+%     P5 -.-> D5
+%     P6 -.-> D6
+%     P7 -.-> D7
+%
+%     %% Styling to visually separate phases from descriptions
+%     classDef phase fill:#e0e8f5,stroke:#333,stroke-width:1px,rx:5px,ry:5px;
+%     classDef sub fill:#f2f2f2,stroke:#666,stroke-width:1px,rx:3px,ry:3px,font-size:12px;
+%
+%     class P1,P2,P3,P4,P5,P6,P7 phase;
+%     class D1,D2,D3,D4,D5,D6,D7 sub;

@@ -1,0 +1,193 @@
+% ============================================================
+%  CHAPTER 3 — System Architecture
+% ============================================================
+
+\chapter{System Architecture}
+\label{ch:architecture}
+
+\section{Global Architecture Diagram}
+
+F/mnt/shared/Downloads/mermaid-diagram-2026-05-10-094923.png igure~\ref{fig:global_arch} presents the global architecture of the complete system,
+showing all five layers defined in the project specification: the sensor layer, the
+embedded layer, the server layer, the AI layer, and the application layer.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{global_architecture_diagram.png}
+	\caption{Global architecture of the system.}
+	\label{fig:global_arch}
+\end{figure}
+
+% flowchart LR
+%     subgraph SL["Sensor layer"]
+%         DHT["DHT22\nTemp / Hum"]
+%         MAX["MAX30102\nHR / SpO₂"]
+%     end
+%
+%     subgraph ESP["Embedded layer (ESP32)"]
+%         C1["Core 1\nSensors + web server"]
+%         C0["Core 0\nFirebase task"]
+%         AP["Wi-Fi AP\n192.168.4.1"]
+%         STA["Wi-Fi STA\n802.11n"]
+%         FLASH["LittleFS + NVS\nFlash storage"]
+%     end
+%
+%     subgraph SRV["Server layer"]
+%         AUTH["Firebase Auth\nemail / password"]
+%         RTDB["Firebase RTDB\n/rooms  /patients"]
+%     end
+%
+%     subgraph AIL["AI layer"]
+%         AI["AI / Cloud\nPredictions"]
+%     end
+%
+%     subgraph APP["Application layer"]
+%         WEB["Web dashboard"]
+%         CFG["Config browser"]
+%     end
+%
+%     DHT -->|data| C1
+%     MAX -->|data| C1
+%     C1 <-->|shared globals| C0
+%     C1 --> AP
+%     C0 --> STA
+%     FLASH -.->|NVS load| C0
+%     C1 -.-> FLASH
+%     STA -->|auth| AUTH
+%     STA -->|push| RTDB
+%     RTDB --> AI
+%     RTDB -->|read| WEB
+%     AI -->|reports| WEB
+%     AP <-->|HTTP config| CFG
+
+\section{Functional Architecture}
+
+The system is functionally decomposed into four independent subsystems, each with a
+well-defined interface:
+
+\begin{description}
+	\item[Sensor Subsystem (ESP32, Core~1).]
+	\item[Network/Firebase Subsystem (ESP32, Core~0).]
+	\item[Settings/Web Server Subsystem (ESP32, Core~1).]
+	\item[Configuration and Globals Layer.]
+\end{description}
+
+% -------------------------------------------------------
+% TODO (Backend Team): Describe the functional decomposition
+% of the backend (API router, auth middleware, alert engine,
+% database access layer, etc.).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Backend functional decomposition to be added.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web / AI Teams): Describe the functional
+% decomposition of the web dashboard and AI subsystem.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Web dashboard and AI functional decomposition to be added.]}
+\end{center}
+
+\section{Hardware Architecture}
+
+\begin{description}
+	\item[Microcontroller.]
+	      ESP32-WROOM-32, dual-core at 240\,MHz,
+	      520\,KiB SRAM, 4\,MiB flash.
+
+	\item[Temperature and Humidity Sensor.]
+	      DHT22, single-bus digital interface on GPIO~4.
+
+	\item[Pulse Oximeter and Heart Rate Sensor.]
+	      MAX30102, I\textsuperscript{2}C fast mode (400\,kHz), SDA: GPIO~21,
+	      SCL: GPIO~22.
+
+	\item[Communication.]
+	      IEEE 802.11b/g/n Wi-Fi radio integrated on-chip.
+	      AP interface (192.168.4.1) serves the configuration portal.
+\end{description}
+
+% -------------------------------------------------------
+% TODO (Backend Team): Describe the server hardware
+% (cloud VM, hosting tier, database engine, etc.).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Server hardware description to be added by the backend team.]}
+\end{center}
+
+\section{Software Architecture}
+
+\subsection*{Embedded Software (ESP32)}
+
+The firmware is organised into six source files following a strict, acyclic include
+hierarchy.
+Table~\ref{tab:sw_modules} summarises the modules, their execution core, and their
+responsibilities.
+
+\begin{table}[h!]
+	\centering
+	\caption{ESP32 firmware module summary.}
+	\label{tab:sw_modules}
+	\begin{tabularx}{\linewidth}{lllX}
+		\toprule
+		\textbf{File}           & \textbf{Context} & \textbf{Responsibility}                                                  \\
+		\midrule
+		\texttt{globals.h}      & Header           & Shared variable declarations, DBG macros, timing constants               \\
+		\texttt{sensors.h/cpp}  & Loop             & DHT22 and MAX30102 acquisition, BPM and SpO\textsubscript{2} computation \\
+		\texttt{network.h/cpp}  & FreeRTOS task    & Firebase auth, upload, Wi-Fi management                                  \\
+		\texttt{settings.h/cpp} & ISR callbacks    & HTTP routes, LittleFS, NVS persistence                                   \\
+		\texttt{esp32.ino}      & Entry point      & Global object definitions, \texttt{setup()}, \texttt{loop()}             \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+The dependency graph is strictly acyclic: \texttt{esp32.ino} includes all modules;
+\texttt{network.h/cpp} and \texttt{settings.h/cpp} include \texttt{globals.h};
+\texttt{sensors.h/cpp} includes \texttt{globals.h}.
+No module includes another module's header directly.
+
+% -------------------------------------------------------
+% TODO (Backend Team): Describe the backend software
+% architecture (framework, router structure, middleware
+% chain, database ORM or driver, deployment environment).
+% -------------------------------------------------------
+\subsection*{Backend Software}
+\begin{center}
+	\textit{[To be completed by the backend team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): Describe the web application
+% architecture (framework, component tree, state management,
+% API client, chart libraries, etc.).
+% -------------------------------------------------------
+\subsection*{Web Dashboard Software}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): Describe the AI software architecture
+% (framework, model architecture, training pipeline,
+% deployment mechanism — cloud API, ONNX, TFLite, etc.).
+% -------------------------------------------------------
+\subsection*{AI Software}
+\begin{center}
+	\textit{[To be completed by the AI team.]}
+\end{center}
+
+\section{Processing Pipeline}
+
+The end-to-end data processing pipeline for a single sensor reading, from hardware
+to cloud record, proceeds as follows:
+
+
+% -------------------------------------------------------
+% TODO (Backend / AI / Web Teams): Extend steps 9 onward
+% with the full downstream processing pipeline (backend
+% alert evaluation, AI inference, dashboard update cycle).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Downstream pipeline details to be added by the backend, AI, and web teams.]}
+\end{center}

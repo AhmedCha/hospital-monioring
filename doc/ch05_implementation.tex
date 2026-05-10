@@ -1,0 +1,226 @@
+% ============================================================
+%  CHAPTER 5 — Implementation
+% ============================================================
+
+\chapter{Implementation}
+\label{ch:implementation}
+
+\section{System Overview}
+
+The firmware maps the software architecture described in
+Chapter~\ref{ch:architecture} directly onto the ESP32's dual-core execution model.
+At boot, \texttt{setup()} initialises LittleFS, loads NVS configuration, initialises the sensors, starts
+both Wi-Fi interfaces, registers HTTP routes, and launches the Firebase FreeRTOS task .
+After \texttt{setup()} returns, the Arduino \texttt{loop()} continues to execute, calling \texttt{updateSensors()} on every iteration and scheduling periodic
+Wi-Fi background scans.
+
+% -------------------------------------------------------
+% TODO (Backend Team): describe how the backend connects to
+% and consumes from Firebase (or your chosen database),
+% how the server is started, and how it links to the
+% architecture described in Chapter 3.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Backend system overview to be added.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): describe how the web application
+% connects to the backend and how it relates to the
+% component architecture described in Chapter 3.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Web dashboard system overview to be added.]}
+\end{center}
+
+% ============================================================
+\section{Hardware Implementation}
+% ============================================================
+
+The hardware assembly consists of three components mounted on a common 3.3\,V power
+rail:
+
+\begin{itemize}
+	\item \textbf{ESP32 development board}.
+	\item \textbf{DHT22} connected to GPIO~4.
+	\item \textbf{MAX30102 breakout board} connected to the ESP32's default
+	      I\textsuperscript{2}C bus (SDA: GPIO~21, SCL: GPIO~22), powered at 3.3\,V.
+\end{itemize}
+
+All components are powered from the ESP32 development board's 3.3\,V regulated output.
+The board is powered from USB 5\,V connected to a mains adapter in the hospital room.
+
+% ============================================================
+\section{Hardware Schematics}
+% ============================================================
+
+Figure~\ref{fig:schematic} provides the complete wiring diagram of the assembled circuit.
+
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{hardware_diagram.png}
+	\caption{Hardware wiring diagram}
+	\label{fig:schematic}
+\end{figure}
+
+% ============================================================
+\section{Software Development Environment}
+% ============================================================
+
+Table~\ref{tab:dev_env} lists the complete development environment used for the
+ESP32 embedded subsystem.
+
+\begin{table}[H]
+	\centering
+	\caption{ESP32 software development environment.}
+	\label{tab:dev_env}
+	\begin{tabularx}{\linewidth}{lX}
+		\toprule
+		\textbf{Component} & \textbf{Details}                               \\
+		\midrule
+		Operating System   & Linux (Debian 13 trixie)                       \\
+		ESP32 Arduino core v3.3.7                                           \\
+		Board target       & \texttt{esp32:esp32:esp32da} (ESP32-WROOM-32)  \\
+		Flash tool         & \texttt{esptool} (Python); \texttt{mklittlefs} \\
+		Serial monitor     & Custom \texttt{monitor.sh}                     \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+% -------------------------------------------------------
+% TODO (Backend Team): describe your development environment
+% (language, framework, runtime version, database engine,
+% deployment platform, IDE, dependency manager).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Backend development environment to be added.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): describe your development
+% environment (Node version, framework, build tool, etc.).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Web dashboard development environment to be added.]}
+\end{center}
+
+% ============================================================
+\section{Software Implementation}
+% ============================================================
+
+\subsection{Embedded Subsystem}
+
+\subsubsection{Firebase Initialisation on Core~0}
+
+The \texttt{initFirebase()} function is called from inside
+\texttt{firebaseUploadTask()}, which is pinned to Core~0 via
+\texttt{xTaskCreatePinnedToCore(..., 0)}.
+
+\subsubsection{Configuration Portal}
+
+The configuration portal is served entirely from the LittleFS partition.
+The \texttt{isAPConnected()} guard checks whether the incoming request arrived via
+the AP subnet (\texttt{WiFi.softAPIP()}) and redirects any STA-side request to the
+root path, preventing access from the hospital network.
+
+\subsubsection{Wi-Fi Recovery}
+
+All reconnection logic is consolidated in the \texttt{wifiConnect()} helper, which
+always calls \texttt{WiFi.disconnect()} followed by
+\texttt{WiFi.begin(ssid, password)}.
+
+% -------------------------------------------------------
+% TODO (Backend Team): describe your backend implementation
+% details (route handlers, middleware, database queries,
+% alert engine implementation, authentication logic).
+% -------------------------------------------------------
+\subsection{Backend Implementation}
+\begin{center}
+	\textit{[To be completed by the backend team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): describe the web application
+% implementation (key components, real-time update logic,
+% chart implementation, alert display logic).
+% -------------------------------------------------------
+\subsection{Web Dashboard Implementation}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% ============================================================
+\section{Software Validation}
+% ============================================================
+
+\subsection{Embedded Subsystem Validation}
+
+Validation was performed across three dimensions:
+
+\textbf{Sensor output validation.}
+DHT22 readings were cross-referenced against a calibrated reference thermometer.
+
+\textbf{Firebase upload validation.}
+The Firebase Realtime Database console was monitored in real time to confirm record
+arrival, correct path structure (\texttt{/rooms/\{roomId\}} and
+\texttt{/patients/\{patientId\}}), correct field names and data types, and
+correct server-generated timestamps.
+
+\textbf{Authentication validation.}
+The serial monitor (debug build) was used to trace the complete authentication event
+sequence: \textit{authenticating} $\to$ \textit{auth request sent} $\to$
+\textit{auth response received} $\to$ \textit{token obtained}.
+Error conditions (invalid API key, incorrect password) were deliberately induced
+and confirmed to produce the expected HTTP~400 error codes via the callback.
+
+% -------------------------------------------------------
+% TODO (Backend Team): describe your API validation
+% protocol (unit tests, integration tests, Postman
+% collections, or equivalent).
+% -------------------------------------------------------
+\subsection{Backend Validation}
+\begin{center}
+	\textit{[To be completed by the backend team: API test protocol, test cases,
+				and results.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): describe UI validation
+% (browser tests, manual test scenarios, responsive
+% design validation on target devices).
+% -------------------------------------------------------
+\subsection{Web Dashboard Validation}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% ============================================================
+\section{Embedded Implementation (ESP32)}
+% ============================================================
+
+\subsection{Memory Optimisation}
+
+The LittleFS image partition is mounted with \texttt{LittleFS.begin(true)}, enabling automatic
+formatting on first boot.
+NVS storage uses the \texttt{Preferences} library with the \texttt{"settings"}
+namespace, consuming at most 10 string entries at typical credential lengths.
+
+\subsection{Latency Optimisation}
+
+Delta filtering (Equations~\ref{eq:room_thresh} and~\ref{eq:patient_thresh}) reduces
+the frequency of HTTPS requests to only those carrying new information, keeping the
+per-upload round-trip time as the dominant latency term rather than queuing delays.
+
+% -------------------------------------------------------
+% TODO (AI Team): if deploying any model on the ESP32 or
+% on the cloud, describe the model/algorithm adaptation,
+% memory optimisation, latency optimisation, and any
+% modifications made to fit the platform.
+% -------------------------------------------------------
+\section{AI Integration}
+\begin{center}
+	\textit{[To be completed by the AI team: model conversion, deployment mechanism
+				(cloud API / TFLite / ONNX), integration with the data pipeline, and known
+				limitations.]}
+\end{center}

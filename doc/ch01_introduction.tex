@@ -1,0 +1,54 @@
+\chapter{Introduction}
+
+\section{Context}
+
+The healthcare sector is undergoing a significant transformation driven the Internet of Things (IoT) technologies.
+Continuous, real-time monitoring of patient vital signs and ambient room conditions is a foundational requirement in any clinical environment, enabling medical staff to detect deterioration early, respond rapidly, and reduce the administrative overhead associated with manual observation rounds.
+
+This project proposes a complete, end-to-end hospital monitoring solution composed
+of four integrated subsystems:
+
+\begin{itemize}
+	\item \textbf{Embedded acquisition node (ESP32):} real-time sensor acquisition and authenticated cloud transmission.
+	\item \textbf{Backend server:} database management, alert rule evaluation, and
+	      user authentication.
+	\item \textbf{Web dashboard:} real-time data visualisation, historical charts,
+	      and alert management for medical staff.
+	\item \textbf{AI prediction layer:} anomaly detection on patient vitals and
+	      environmental condition assessment using cloud-hosted machine learning models.
+\end{itemize}
+
+\section{Problem Statement}
+
+Hospital rooms require continuous monitoring of two categories of parameters:
+environmental conditions (temperature and humidity), which directly affect patient
+comfort, infection risk, and equipment operation; and patient vital signs (heart rate
+and blood oxygen saturation), which are primary indicators of physiological status.
+
+The current approach in many low-resource clinical settings relies on periodic manual
+measurement, which introduces observation gaps and increases nursing workload.
+
+\section{Objectives}
+
+The project objectives are divided into functional and technical categories.
+
+\subsection*{Functional Objectives}
+
+\begin{enumerate}
+	\item Continuously acquire temperature (°C), humidity (\%), heart rate (BPM), and
+	      blood oxygen saturation (SpO\textsubscript{2}, \%) from dedicated sensors.
+	\item Transmit sensor data to a cloud database at a near-real-time rate of up to 1\,Hz.
+	\item Implement a web dashboard for real-time data visualisation, history browsing,
+	      and alert management.
+	\item Generate automated predictions and anomaly alerts via a cloud AI model.
+\end{enumerate}
+
+\subsection*{Technical Objectives}
+
+\begin{enumerate}
+	\item Availability: the system shall operate continuously with network recovery mech-
+	      anisms.
+	\item Reliability: invalid or inconsistent data shall be detected and flagged.
+	\item Security: secure authentication and encrypted communication (HTTPS).
+	\item Performance: near real-time data updates based on sampling frequency.
+\end{enumerate}

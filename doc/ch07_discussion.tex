@@ -1,0 +1,153 @@
+% ============================================================
+%  CHAPTER 7 — Discussion
+% ============================================================
+
+\chapter{Discussion}
+\label{ch:discussion}
+
+% ============================================================
+\section{Validity of Results}
+% ============================================================
+
+\subsection{Embedded Subsystem}
+
+The sensor measurements are consistent with the manufacturer-specified accuracy of the
+DHT22 ($\pm$0.5\,°C, $\pm$2--5\,\% RH) and within the expected operational range of
+the MAX30102 for resting-state adult subjects.
+The BPM standard deviation of 2.3\,BPM reflects the inherent variability of
+beat-to-beat interval detection under minor motion artefacts.
+The SpO\textsubscript{2} accuracy of $\pm$1\,\% is within the $\pm$2\,\% tolerance
+generally accepted.
+
+% -------------------------------------------------------
+% TODO (Backend Team): discuss the validity of your API
+% test results (is the response time consistent? are there
+% edge cases that were not covered? is the alert logic
+% triggering correctly?).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Backend results validity discussion to be added.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web / AI Teams): discuss validity of your results.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Web dashboard and AI results validity discussion to be added.]}
+\end{center}
+
+% ============================================================
+\section{Limitations}
+% ============================================================
+
+\subsection{Embedded Subsystem}
+
+\begin{description}
+	\item[No local offline buffer.]
+	      Records generated during network outages are discarded.
+
+	\item[Plaintext NVS storage.]
+	      Firebase credentials (API key, email, password) are stored in NVS without
+	      encryption.
+	      The ESP32 NVS partition supports native encryption via an NVS key partition;
+	      this should be enabled before any production deployment.
+
+	\item[Implicit shared-memory atomicity.]
+	      The sensor globals are 32-bit floats written on Core~1 and read on Core~0
+	      without explicit synchronisation.
+	      A FreeRTOS mutex or atomic qualifier is the correct long-term solution.
+
+	\item[Single patient per device.]
+	      The current design maps one device to exactly one patient and one room.
+	      Multi-patient rooms would require either multiple devices or a structural change
+	      to the data model.
+\end{description}
+
+% -------------------------------------------------------
+% TODO (Backend Team): list and discuss backend limitations
+% (e.g. no rate limiting, single-region deployment, no
+% caching layer, alert delivery latency, etc.).
+% -------------------------------------------------------
+\subsection{Backend Subsystem}
+\begin{center}
+	\textit{[To be completed by the backend team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): list and discuss dashboard
+% limitations (e.g. no offline mode, supported browsers,
+% chart rendering performance with large datasets, etc.).
+% -------------------------------------------------------
+\subsection{Web Dashboard Subsystem}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): list and discuss AI limitations
+% (e.g. limited training data, class imbalance, model
+% latency budget, false positive rate, dependency on
+% data quality from the embedded node, etc.).
+% -------------------------------------------------------
+\subsection{AI Subsystem}
+\begin{center}
+	\textit{[To be completed by the AI team.]}
+\end{center}
+
+% ============================================================
+\section{ESP32 Constraints Impact}
+% ============================================================
+
+The most significant platform constraint encountered was the non-thread-safety of
+the mbedTLS context, which imposed the non-obvious architectural requirement of
+deferring Firebase initialisation until the task is running on Core~0.
+
+The 8\,KiB task stack was found to be adequate for the TLS handshake and async send
+operations, with an estimated 1.5\,KiB headroom.
+
+The choice of string-based JSON construction introduces heap fragmentation over long
+sessions.
+
+% ============================================================
+\section{Robustness}
+% ============================================================
+
+The unified \texttt{wifiConnect()} function using \texttt{WiFi.begin()} handles both
+cold-start failure and mid-session dropout correctly, as confirmed by Session~2 and
+Session~3 of the stability tests.
+
+The delta-threshold filter provides robustness against spurious sensor noise:
+fluctuations smaller than 0.3\,°C, 0.5\,\% RH, or 2\,\% SpO\textsubscript{2} do
+not generate database writes, reducing both network load and the volume of
+low-information records in the database.
+
+% ============================================================
+\section{Identified Improvements}
+% ============================================================
+
+Priority improvements for future versions of the embedded subsystem:
+
+\begin{enumerate}
+	\item \textbf{Local offline buffer.}
+	      A LittleFS-backed FIFO queue for records generated during network outages,
+	      with automatic retry on reconnection.
+	      This would eliminate the record loss observed in Sessions~2 and~3.
+
+	\item \textbf{NVS encryption.}
+	      Enable the ESP32 native NVS encryption partition to protect credentials at rest.
+
+	\item \textbf{Thread-safe sensor globals.}
+	      Replace raw float globals with a mutex-protected struct or a FreeRTOS queue
+	      for safe inter-core communication.
+
+	\item \textbf{Wi-Fi modem sleep.}
+	      Implement modem sleep between upload intervals to reduce average current usage for future battery-powered deployments.
+\end{enumerate}
+
+% -------------------------------------------------------
+% TODO (Backend / Web / AI Teams): add your own improvement
+% lists here.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Improvements for the backend, web dashboard, and AI subsystems to be added.]}
+\end{center}

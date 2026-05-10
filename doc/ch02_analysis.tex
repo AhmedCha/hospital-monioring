@@ -1,0 +1,154 @@
+\chapter{Problem Analysis and Preliminary Study}
+
+\section{System Description}
+
+The system is a networked, multi-tier hospital monitoring solution.
+At its base sits the \textbf{ESP32 embedded acquisition node}, which occupies the
+sensor layer and embedded layer. Its role is to collect physiological and environmental
+measurements, apply local signal processing to derive meaningful values (BPM,
+SpO\textsubscript{2}), and transmit structured records to a cloud database.
+
+% -------------------------------------------------------
+% TODO (Backend / Full-system Team):
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Full system description to be extended with backend and web layers.]}
+\end{center}
+
+\section{Use Cases}
+
+The following operational scenarios define the expected system behaviour.
+
+\subsection*{Embedded Node Use Cases}
+
+\begin{description}
+	\item[UC-1: Initial Configuration.]
+	      A technician connects to the ESP32's Access Point and enter Wi-Fi credentials, Firebase credentials, room ID, and patient ID. The device saves all settings to NVS, serves a confirmation page, and reboots.
+
+	\item[UC-2: Normal Operation.]
+	      After boot, the device loads credentials from NVS, connects to the hospital Wi-Fi,
+	      authenticates with Firebase, and enters continuous monitoring mode.
+
+	\item[UC-3: Wi-Fi Recovery.]
+	      If Wi-Fi is lost during operation (or fails on cold start), the embedded device
+	      detects the disconnection and retries \texttt{wifiConnect()} every 10 seconds,
+	      indefinitely, without manual intervention.
+
+	\item[UC-4: Remote Reconfiguration.]
+	      A technician connects to the AP at any time to update credentials.
+	      After saving, the device reboots and applies the new configuration.
+\end{description}
+
+% -------------------------------------------------------
+% TODO (Backend Team): Add use cases for the backend:
+% e.g. UC-6: User login, UC-7: Alert configuration,
+% UC-8: Historical data query.
+% -------------------------------------------------------
+\subsection*{Backend Use Cases}
+\begin{center}
+	\textit{[To be completed by the backend team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): Add use cases for the dashboard:
+% e.g. UC-9: Real-time monitoring view, UC-10: Alert history.
+% -------------------------------------------------------
+\subsection*{Web Dashboard Use Cases}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): Add use cases for the AI subsystem:
+% e.g. UC-11: Anomaly detection, UC-12: Report generation.
+% -------------------------------------------------------
+\subsection*{AI Subsystem Use Cases}
+\begin{center}
+	\textit{[To be completed by the AI team.]}
+\end{center}
+
+\section{Inputs and Outputs}
+
+\subsection*{Embedded Node — Inputs}
+
+\begin{itemize}
+	\item \textbf{DHT22 (GPIO~4, one-wire):} digital temperature (°C) and relative
+	      humidity (\%).
+	\item \textbf{MAX30102 (I\textsuperscript{2}C fast mode):} raw infrared
+	      and red photodiode FIFO values, used to compute BPM and SpO\textsubscript{2}.
+\end{itemize}
+
+\subsection*{Embedded Node — Outputs}
+
+\begin{itemize}
+	\item \textbf{Firebase RTDB — \texttt{/rooms/\{roomId\}}:}
+	      JSON records containing \texttt{temperature}, \texttt{humidity}, and
+	      server-side \texttt{timestamp}, pushed on significant change.
+	\item \textbf{Firebase RTDB — \texttt{/patients/\{patientId\}}:}
+	      JSON records containing \texttt{heartRate}, \texttt{spO2}, and
+	      server-side \texttt{timestamp}, pushed on significant change.
+\end{itemize}
+
+% -------------------------------------------------------
+% TODO (Backend / Web / AI Teams): Describe inputs and
+% outputs for each of your subsystems (API endpoints,
+% database queries, model inputs/outputs, etc.).
+% -------------------------------------------------------
+\subsection*{Backend, Web Dashboard, and AI — Inputs/Outputs}
+\begin{center}
+	\textit{[To be completed by the backend, web dashboard, and AI teams.]}
+\end{center}
+
+\section{Constraints}
+
+\subsection*{Memory Constraints}
+
+The ESP32 has 520\,KiB of internal SRAM.
+The Firebase FreeRTOS task is allocated 8\,192 bytes of stack, which must accommodate
+the TLS handshake context, async client buffers, and local variables.
+The NVS partition stores up to ten string key-value pairs for device configuration.
+
+\subsection*{Latency Constraints}
+
+The Firebase upload interval is \texttt{FIREBASE\_INTERVAL\_MS = 1\,000\,ms},
+providing a near-real-time update rate.
+The DHT22 enforces a hardware minimum inter-sample interval of 2\,000\,ms.
+
+% -------------------------------------------------------
+% TODO (Backend Team): Add latency constraints for the API
+% -------------------------------------------------------
+
+\subsection*{Energy Constraints}
+
+The device is assumed to be mains-powered in a fixed hospital room installation.
+No active power management (light sleep, deep sleep, or radio duty cycling) is
+implemented in the current version.
+
+\subsection*{ESP32 Platform Limitations}
+
+\textbf{Sensor timing sensitivity.}
+The MAX30102 heart rate and SpO\textsubscript{2} sensor produces a continuous stream
+of readings that must be drained from its internal buffer regularly.
+If the program is busy doing something else — such as waiting for a Firebase upload
+to complete, which can take several hundred milliseconds or more — the sensor buffer
+fills up and new samples are dropped.
+This results in the sensor reporting zero or no data, as if no finger were present,
+even when one is.
+
+\textbf{Why two cores are necessary.}
+The ESP32 contains two independent processing cores that can run tasks simultaneously.
+This hardware feature is the direct solution to the timing conflict described above.
+By assigning sensor reading exclusively to Core~1 and all Firebase communication
+exclusively to Core~0, the two tasks never block each other.
+The sensor continues reading at its required rate regardless of how long Firebase
+takes to authenticate, upload, or reconnect — and Firebase operations proceed without
+being interrupted by sensor activity.
+% -------------------------------------------------------
+% TODO (AI Team): Add constraints for model size, inference
+% latency, and memory footprint if deploying on embedded
+% hardware, or cloud compute budget if cloud-based.
+% -------------------------------------------------------
+\subsection*{AI and Cloud Constraints}
+\begin{center}
+	\textit{[To be completed by the AI team.]}
+\end{center}

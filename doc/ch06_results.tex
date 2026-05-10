@@ -1,0 +1,198 @@
+% ============================================================
+%  CHAPTER 6 — Experimental Results and Validation
+% ============================================================
+
+\chapter{Experimental Results and Validation}
+\label{ch:results}
+
+% ============================================================
+\section{Experimental Protocol}
+% ============================================================
+
+\subsection{Embedded Subsystem Protocol}
+
+\begin{description}
+	\item[Hardware setup.]
+	      One ESP32-WROOM-32 development board, one DHT22 sensor, one MAX30102 breakout
+	      board, all powered via USB from a laptop running the serial monitor.
+
+	\item[Network environment.]
+	      2.4\,GHz 802.11n Wi-Fi network.
+	      Firebase Realtime Database.
+
+	\item[Firmware build.]
+	      Debug build (\texttt{deploy.sh --code --debug}) for all experiments, to capture
+	      serial output.
+\end{description}
+
+% -------------------------------------------------------
+% TODO (Backend Team): describe the backend test protocol.
+% Specify: test environment (local / staging / production),
+% tools used (Postman, pytest, curl, etc.), number of
+% test cases, types of tests (unit, integration, load).
+% -------------------------------------------------------
+\subsection{Backend Protocol}
+\begin{center}
+	\textit{[To be completed by the backend team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): describe the dashboard
+% validation protocol (browsers tested, devices, test
+% scenarios for real-time updates and historical view).
+% -------------------------------------------------------
+\subsection{Web Dashboard Protocol}
+\begin{center}
+	\textit{[To be completed by the web dashboard team.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): describe the AI experimental protocol.
+% Must specify: dataset source, number of samples,
+% train/test split, evaluation hardware (PC + ESP32 if
+% embedded), number of runs, evaluation conditions.
+% -------------------------------------------------------
+\subsection{AI Protocol}
+\begin{center}
+	\textit{[To be completed by the AI team: dataset description, train/test split,
+				evaluation hardware, number of experiments, metrics used.]}
+\end{center}
+
+% ============================================================
+\section{Software Results (PC / Server)}
+% ============================================================
+
+% -------------------------------------------------------
+% TODO (Backend Team): report API performance metrics
+% measured on the server side:
+%   - Response time for each endpoint (GET /patients,
+%     GET /rooms, POST /alerts, etc.)
+%   - Database write and read latency
+%   - Throughput under simulated multi-device load
+%   - Error rate during tests
+% Use a table like the one below.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Backend software results to be completed.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): report all PC-side model evaluation
+% results. Must include performance metrics appropriate
+% to the task:
+%   - Classification: accuracy, precision, recall, F1-score
+%   - Regression: MAE, RMSE
+%   - Anomaly detection: precision, recall, AUC-ROC
+% Present results in a table and reference the training
+% curves in Section~\ref{sec:ai_curves}.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[AI software results (PC-side evaluation) to be completed.]}
+\end{center}
+
+% ============================================================
+\section{Embedded Results (ESP32)}
+% ============================================================
+
+
+% ============================================================
+\section{Latency and FPS Analysis}
+% ============================================================
+
+% -------------------------------------------------------
+% TODO (all teams): fill in the comparative latency table
+% below for the complete system once all subsystems are
+% available. Add rows for backend API latency and AI
+% inference latency.
+% -------------------------------------------------------
+
+\begin{table}[H]
+	\centering
+	\caption{System-wide latency comparison (to be completed with all subsystem data).}
+	\label{tab:latency_full}
+	\begin{tabular}{lccc}
+		\toprule
+		\textbf{Stage}              & \textbf{PC/Server}               & \textbf{ESP32}          & \textbf{Analysis}           \\
+		\midrule
+		Sensor acquisition          & N/A                              & $\leq$2\,000\,ms        & Hardware constraint (DHT22) \\
+		Local processing            & N/A                              & $<$5\,ms                & Negligible                  \\
+		HTTPS upload (steady state) & N/A                              & 120--280\,ms            & RTT to Firebase             \\
+		Backend API response        & \textit{TBD}                     & N/A                     & \textit{[To be filled]}     \\
+		AI inference                & \textit{TBD}                     & N/A                     & \textit{[To be filled]}     \\
+		End-to-end (sensor to UI)   & \multicolumn{2}{c}{\textit{TBD}} & \textit{[To be filled]}                               \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+% ============================================================
+\section{Comparison: Specification vs.\ Observed Behaviour}
+% ============================================================
+
+Table~\ref{tab:comparison} compares the functional requirements from the project
+specification against the observed behaviour of the implemented embedded subsystem.
+
+\begin{table}[H]
+	\centering
+	\caption{Specification vs.\ implementation validation for the embedded subsystem.}
+	\label{tab:comparison}
+	\begin{tabularx}{\linewidth}{lXX}
+		\toprule
+		\textbf{Requirement} & \textbf{Expected}                                             & \textbf{Observed} \\
+		\midrule
+		Wi-Fi reconnection
+		                     & Automatic, no intervention
+		                     & \cmark\ Reconnects within 10--15\,s                                               \\
+		Firebase authentication
+		                     & Email/password over TLS
+		                     & \cmark\ JWT token obtained; events logged via callback                            \\
+		Delta-threshold filtering
+		                     & Suppress redundant writes
+		                     & \cmark\ Confirmed via Firebase console (no duplicate records)                     \\
+		AP configuration portal
+		                     & Accessible at 192.168.4.1
+		                     & \cmark\ Served from LittleFS; settings persisted to NVS                           \\
+		NVS persistence
+		                     & Settings survive reboot
+		                     & \cmark\ Verified across 5 cold reboots                                            \\
+		Debug/release build
+		                     & Zero serial overhead in release
+		                     & \cmark\ Confirmed via binary size reduction                                       \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+% -------------------------------------------------------
+% TODO (Backend / Web / AI Teams): add comparison rows for
+% your subsystems once validation is complete.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Comparison table to be extended with backend, web dashboard, and AI
+				validation results.]}
+\end{center}
+
+% ============================================================
+\section{Error Analysis}
+% ============================================================
+
+\subsection{Embedded Subsystem}
+
+Three categories of error were identified and analysed:
+
+\textbf{Sensor read errors.}
+The DHT22 occasionally returns NaN on the first read after power-up due to its
+required 1-second warm-up delay.
+The NaN guard in \texttt{updateSensors()} discards the invalid reading silently.
+No invalid values were written to the database in any test session.
+
+\textbf{Records lost during outage (open).}
+Records generated during a Wi-Fi outage are discarded.
+The system does not implement local buffering or retry-on-reconnect.
+
+% -------------------------------------------------------
+% TODO (Backend / Web / AI Teams): document error categories
+% observed during validation of your subsystems, their
+% root causes, and whether they were resolved.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Error analysis for the backend, web dashboard, and AI subsystems to be added.]}
+\end{center}

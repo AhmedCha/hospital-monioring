@@ -1,0 +1,114 @@
+% ============================================================
+%  CHAPTER 8 — Conclusion
+% ============================================================
+
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+% ============================================================
+\section{Summary}
+% ============================================================
+
+This project designed, implemented, and validated a complete ESP32-based embedded
+acquisition node for a hospital room and patient monitoring system.
+The firmware acquires temperature, humidity, heart rate, and blood oxygen saturation
+from two sensor peripherals, applies local signal processing to derive clinically
+meaningful values, and transmits authenticated records to Firebase Realtime Database
+at a near-real-time rate of up to 1\,Hz.
+
+The system is structured around four integrated subsystems --- the ESP32 embedded
+node, the backend server, the web dashboard, and the AI prediction layer --- each
+developed independently and connected through a shared Firebase Realtime Database.
+This report focused on the embedded subsystem contribution and provided placeholder
+sections for the remaining three subsystems.
+
+% ============================================================
+\section{Results Summary}
+% ============================================================
+
+The key results achieved by the embedded subsystem are:
+
+\begin{itemize}
+	\item Sensor accuracy within manufacturer specifications: $\pm$0.1\,°C for
+	      temperature, $\pm$0.4\,\% for humidity, $\pm$1.0\,BPM for heart rate, and
+	      $\pm$1.0\,\% for SpO\textsubscript{2}.
+	\item Steady-state end-to-end latency of $\approx$2\,200\,ms for room data
+	      (dominated by the DHT22 hardware sampling period) and $\approx$250\,ms for
+	      patient data.
+	\item Successful automatic Wi-Fi recovery in both mid-session dropout and
+	      cold-start failure scenarios, with reconnection within 10--15\,s.
+	\item Stable email/password Firebase authentication with full event traceability
+	      via the async callback, confirmed across all test sessions.
+	\item Zero invalid records written to the database across all sessions, thanks
+	      to the NaN guard and IR threshold checks.
+	\item Complete configuration persistence across five cold reboots via NVS.
+\end{itemize}
+
+% -------------------------------------------------------
+% TODO (Backend Team): add a paragraph summarising your
+% key results (API response times, alert accuracy, etc.).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Backend results summary to be added.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (Web Dashboard Team): add a paragraph summarising
+% your key results.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Web dashboard results summary to be added.]}
+\end{center}
+
+% -------------------------------------------------------
+% TODO (AI Team): add a paragraph summarising your key
+% results (model accuracy, inference latency, etc.).
+% -------------------------------------------------------
+\begin{center}
+	\textit{[AI results summary to be added.]}
+\end{center}
+
+% ============================================================
+\section{Limitations}
+% ============================================================
+
+The primary limitation of the embedded subsystem is the absence of a local offline
+buffer: records generated during network outages are permanently lost.
+Secondary limitations include plaintext NVS credential storage, implicit float
+atomicity assumptions in the inter-core shared globals, and the absence of a
+device-side RTC for accurate timestamping during outages.
+
+% -------------------------------------------------------
+% TODO (all teams): add a sentence per subsystem summarising
+% the main unresolved limitation.
+% -------------------------------------------------------
+\begin{center}
+	\textit{[Limitations for all other subsystems to be summarised here.]}
+\end{center}
+
+% ============================================================
+\section{Future Work}
+% ============================================================
+
+The following directions are identified for future development of the complete system:
+
+\begin{enumerate}
+	\item \textbf{Multi-room scalability} (backend + embedded): extend the data
+	      model and backend to support concurrent streams from multiple ESP32 nodes
+	      deployed across different hospital rooms.
+
+	\item \textbf{Real-time push notifications} (backend + web): replace the
+	      polling-based dashboard with WebSocket or Server-Sent Events for sub-second
+	      alert delivery to medical staff.
+
+	\item \textbf{Enhanced AI model} (AI): extend the prediction model to
+	      incorporate multi-parameter correlation (e.g.\ combined BPM, SpO\textsubscript{2},
+	      and room temperature trends) to improve anomaly detection sensitivity and
+	      reduce false positive rates.
+
+	\item \textbf{Motion artefact rejection} (embedded): add an accelerometer to
+	      suppress SpO\textsubscript{2} readings during patient movement.
+
+	\item \textbf{Power management} (embedded): implement Wi-Fi modem sleep to
+	      reduce power consumption for potential battery-backup deployments.
+\end{enumerate}
