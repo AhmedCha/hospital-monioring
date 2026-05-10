@@ -19,25 +19,29 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const doc = await userRef.get();
 
   const now = new Date().toISOString();
-  const data: any = {
-    openId: user.openId,
-    name: user.name ?? null,
-    email: user.email ?? null,
-    loginMethod: user.loginMethod ?? "firebase",
-    updatedAt: now,
-    lastSignedIn: user.lastSignedIn ?? now,
-  };
-
+  
   if (!doc.exists) {
-    data.id = user.openId;
-    data.createdAt = now;
-    data.role = (user.openId === ENV.ownerOpenId) ? "admin" : (user.role ?? "user");
+    const data: any = {
+      id: user.openId,
+      openId: user.openId,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      loginMethod: user.loginMethod ?? "firebase",
+      createdAt: now,
+      updatedAt: now,
+      lastSignedIn: user.lastSignedIn ?? now,
+      role: (user.openId === ENV.ownerOpenId) ? "admin" : (user.role ?? "user"),
+    };
     await userRef.set(data);
   } else {
     // Only update provided fields
-    const updateData: any = { ...data };
-    delete updateData.id;
-    delete updateData.createdAt;
+    const updateData: any = { updatedAt: now };
+    if (user.name !== undefined) updateData.name = user.name;
+    if (user.email !== undefined) updateData.email = user.email;
+    if (user.loginMethod !== undefined) updateData.loginMethod = user.loginMethod;
+    if (user.lastSignedIn !== undefined) updateData.lastSignedIn = user.lastSignedIn;
+    if (user.role !== undefined) updateData.role = user.role;
+    
     await userRef.update(updateData);
   }
 }
