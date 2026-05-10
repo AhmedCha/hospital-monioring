@@ -23,8 +23,8 @@ export default function Patients() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ name: "", roomId: "" });
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const [photoUploadPersonId, setPhotoUploadPersonId] = useState<number | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [photoUploadPersonId, setPhotoUploadPersonId] = useState<string | null>(null);
   const [photoUploadPersonName, setPhotoUploadPersonName] = useState<string>("");
 
   const patients = people?.filter(p => p.role === "patient") || [];
@@ -50,7 +50,7 @@ export default function Patients() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       await deleteMutation.mutateAsync({ id });
       setDeleteConfirmId(null);

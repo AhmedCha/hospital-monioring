@@ -1,16 +1,29 @@
-import { jwtVerify, importX509, createRemoteJWKSet } from "jose";
+import admin from "firebase-admin";
 
 const PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
 
-// Use Google's JWKS endpoint (JSON Web Key Set) which is cleaner than X.509 certs
-const GOOGLE_JWKS_URL = new URL(
-  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
-);
+if (!admin.apps.length) {
+  try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: process.env.VITE_FIREBASE_DATABASE_URL
+      });
+    } else {
+      admin.initializeApp({
+        projectId: PROJECT_ID,
+        databaseURL: process.env.VITE_FIREBASE_DATABASE_URL
+      });
+    }
+  } catch (error) {
+    console.error("[Firebase Admin] Initialization failed:", error);
+  }
+}
 
-// Cache the JWKS remote keyset (jose handles this automatically)
-const JWKS = createRemoteJWKSet(GOOGLE_JWKS_URL, {
-  cacheMaxAge: 60 * 60 * 1000, // 1 hour
-});
+export const adminAuth = admin.auth();
+export const adminDb = admin.database();
+export const adminFirestore = admin.firestore();
 
 export type FirebaseTokenPayload = {
   uid: string;
@@ -20,35 +33,15 @@ export type FirebaseTokenPayload = {
   email_verified?: boolean;
 };
 
-/**
- * Verify a Firebase ID token without a service account.
- * Uses Google's public JWKS endpoint to verify the JWT signature.
- * Works with both Google Sign-In and Email/Password Firebase tokens.
- */
 export async function verifyFirebaseToken(
   idToken: string
 ): Promise<FirebaseTokenPayload> {
-  if (!PROJECT_ID) {
-    throw new Error("VITE_FIREBASE_PROJECT_ID is not configured in .env");
-  }
-
-  const { payload } = await jwtVerify(idToken, JWKS, {
-    algorithms: ["RS256"],
-    audience: PROJECT_ID,
-    issuer: `https://securetoken.google.com/${PROJECT_ID}`,
-  });
-
-  // Firebase puts the user ID in 'sub' (subject claim)
-  const uid = payload.sub as string;
-  if (!uid) {
-    throw new Error("Firebase token missing user ID (sub claim)");
-  }
-
+  const decodedToken = await adminAuth.verifyIdToken(idToken);
   return {
-    uid,
-    email: payload.email as string | undefined,
-    name: payload.name as string | undefined,
-    picture: payload.picture as string | undefined,
-    email_verified: payload.email_verified as boolean | undefined,
+    uid: decodedToken.uid,
+    email: decodedToken.email,
+    name: decodedToken.name,
+    picture: decodedToken.picture,
+    email_verified: decodedToken.email_verified,
   };
 }

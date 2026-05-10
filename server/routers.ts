@@ -19,13 +19,13 @@ export const appRouter = router({
         try {
           const { uid, name, email } = await verifyFirebaseToken(input.idToken);
 
-          // Sync user to DB
+          // Sync user to Firestore
           await db.upsertUser({
             openId: uid,
             name: name || email || "Anonymous",
             email: email || null,
             loginMethod: "firebase",
-            lastSignedIn: new Date(),
+            lastSignedIn: new Date().toISOString(),
           });
 
           const user = await db.getUserByOpenId(uid);
@@ -56,22 +56,20 @@ export const appRouter = router({
     }),
   }),
 
-  // People management (Patients & Staff)
   people: peopleRouter,
-  patients: peopleRouter, // Backward compatibility
+  patients: peopleRouter, 
 
-  // Detection events
   events: router({
     list: protectedProcedure.query(({ ctx }) =>
       db.getDetectionEventsByUserId(ctx.user.id, 500)
     ),
     getByPatient: protectedProcedure
-      .input(z.object({ patientId: z.number() }))
+      .input(z.object({ patientId: z.string() }))
       .query(({ input }) => db.getDetectionEventsByPatientId(input.patientId, 500)),
     log: protectedProcedure
       .input(z.object({
-        patientId: z.number().optional(),
-        personId: z.number().optional(),
+        patientId: z.string().optional(),
+        personId: z.string().optional(),
         eventType: z.enum(["patient present", "patient absent", "unknown person detected", "person recognized"]),
         severity: z.enum(["info", "warning", "alert"]),
         description: z.string().optional(),
@@ -82,17 +80,16 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const event = await db.logDetectionEvent({
           userId: ctx.user.id,
-          patientId: input.patientId,
-          personId: input.personId ?? input.patientId,
+          personId: input.personId ?? input.patientId ?? null,
           eventType: input.eventType,
           severity: input.severity,
-          description: input.description,
+          description: input.description ?? null,
           detectedFaceDescriptor: input.detectedFaceDescriptor,
-          matchConfidence: input.matchConfidence,
-          roomId: input.roomId,
+          matchConfidence: input.matchConfidence ?? null,
+          roomId: input.roomId ?? null,
+          timestamp: new Date().toISOString(),
         });
 
-        // Send alert notifications for critical events
         if (input.eventType === "unknown person detected" && input.severity === "alert") {
           await notifyOwner({
             title: "Unknown Person Detected",
@@ -100,11 +97,12 @@ export const appRouter = router({
           });
           await db.createAlertLog({
             userId: ctx.user.id,
+            detectionEventId: event.id,
             alertType: "unknown person detected",
             severity: "alert",
             title: "Unknown Person Detected",
             message: `Unknown person detected in room ${input.roomId || "unknown"}`,
-            roomId: input.roomId,
+            roomId: input.roomId ?? null,
           });
         } else if (input.eventType === "patient absent" && input.severity === "alert") {
           await notifyOwner({
@@ -113,11 +111,12 @@ export const appRouter = router({
           });
           await db.createAlertLog({
             userId: ctx.user.id,
+            detectionEventId: event.id,
             alertType: "patient missing",
             severity: "alert",
             title: "Patient Missing",
             message: `Patient missing from room ${input.roomId || "unknown"}`,
-            roomId: input.roomId,
+            roomId: input.roomId ?? null,
           });
         }
 
@@ -125,7 +124,6 @@ export const appRouter = router({
       }),
   }),
 
-  // Alerts
   alerts: router({
     list: protectedProcedure.query(({ ctx }) =>
       db.getAlertLogsByUserId(ctx.user.id, 500)
@@ -134,4 +132,3 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
-

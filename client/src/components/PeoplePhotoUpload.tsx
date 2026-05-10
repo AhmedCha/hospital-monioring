@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Upload, Check, AlertCircle, Loader2 } from "lucide-react";
 
 interface PeoplePhotoUploadProps {
-  personId: number;
+  personId: string;
   personName: string;
   onPhotoEnrolled: (photoUrl: string, faceDescriptor: Float32Array) => void;
   isOpen: boolean;

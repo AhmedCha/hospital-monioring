@@ -1,290 +1,196 @@
-import { eq, desc } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
-import { InsertUser, users, people, detectionEvents, alertLogs, roomActivityLogs } from "../drizzle/schema";
+import { adminFirestore, adminDb } from "./_core/firebase";
+import { 
+  User, InsertUser, 
+  Person, InsertPerson, 
+  DetectionEvent, InsertDetectionEvent,
+  AlertLog, InsertAlertLog,
+  RoomActivityLog, InsertRoomActivityLog
+} from "../shared/schema";
 import { ENV } from './_core/env';
-import fs from "fs";
-import path from "path";
 
-let _db: any = null;
-let _pool: any = null;
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      if (!_pool) {
-        _pool = mysql.createPool(process.env.DATABASE_URL);
-      }
-      // Cast to any here to satisfy the assignment to _db
-      _db = drizzle(_pool as any);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
-  }
-  return _db;
-}
+// --- Users ---
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
   }
 
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
+  const userRef = adminFirestore.collection("users").doc(user.openId);
+  const doc = await userRef.get();
 
-  try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
+  const now = new Date().toISOString();
+  const data: any = {
+    openId: user.openId,
+    name: user.name ?? null,
+    email: user.email ?? null,
+    loginMethod: user.loginMethod ?? "firebase",
+    updatedAt: now,
+    lastSignedIn: user.lastSignedIn ?? now,
+  };
 
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet as any,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
+  if (!doc.exists) {
+    data.id = user.openId;
+    data.createdAt = now;
+    data.role = (user.openId === ENV.ownerOpenId) ? "admin" : (user.role ?? "user");
+    await userRef.set(data);
+  } else {
+    // Only update provided fields
+    const updateData: any = { ...data };
+    delete updateData.id;
+    delete updateData.createdAt;
+    await userRef.update(updateData);
   }
 }
 
-export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+export async function getUserByOpenId(openId: string): Promise<User | undefined> {
+  const doc = await adminFirestore.collection("users").doc(openId).get();
+  if (!doc.exists) return undefined;
+  return doc.data() as User;
 }
 
-// Person management queries (replacing patients)
-export async function createPerson(data: {
-  userId: number;
-  name: string;
-  role: "patient" | "doctor" | "nurse" | "other";
-  roomId?: string | null;
-  photoUrl?: string | null;
-  photoStorageKey?: string | null;
-  enrolledFaceDescriptor?: unknown;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
+// --- People (Patients & Staff) ---
 
-  const result = await db.insert(people).values(data as any);
-  return result;
+export async function createPerson(data: InsertPerson): Promise<{ id: string }> {
+  const res = await adminFirestore.collection("people").add({
+    ...data,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    isActive: 1,
+  });
+  await res.update({ id: res.id });
+  return { id: res.id };
 }
 
-export async function getPeopleByUserId(userId: number, role?: string) {
-  const db = await getDb();
-  if (!db) return [];
-
-  let query = db.select().from(people).where(eq(people.userId, userId));
-  
+export async function getPeopleByUserId(userId: string, role?: string): Promise<Person[]> {
+  let query: any = adminFirestore.collection("people").where("userId", "==", userId);
   if (role) {
-    // Note: Drizzle mysql doesn't support .where chaining like this easily if I don't use the builder
-    // But this is simple enough
+    query = query.where("role", "==", role);
   }
-
-  return await query;
+  const snapshot = await query.get();
+  return snapshot.docs.map((doc: any) => doc.data() as Person);
 }
 
-export async function getPersonById(personId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db.select().from(people).where(eq(people.id, personId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+export async function getPersonById(personId: string): Promise<Person | undefined> {
+  const doc = await adminFirestore.collection("people").doc(personId).get();
+  if (!doc.exists) return undefined;
+  return doc.data() as Person;
 }
 
-export async function updatePerson(personId: number, data: Partial<{
-  name: string;
-  role: "patient" | "doctor" | "nurse" | "other";
-  roomId: string | null;
-  photoUrl: string | null;
-  photoStorageKey: string | null;
-  enrolledFaceDescriptor: unknown;
-  isActive: number;
-}>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  return await db.update(people).set(data as any).where(eq(people.id, personId));
+export async function updatePerson(personId: string, data: Partial<InsertPerson & { isActive: number }>): Promise<void> {
+  await adminFirestore.collection("people").doc(personId).update({
+    ...data,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
-export async function deletePerson(personId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  return await db.delete(people).where(eq(people.id, personId));
+export async function deletePerson(personId: string): Promise<void> {
+  await adminFirestore.collection("people").doc(personId).delete();
 }
 
-// Backward compatibility for patient queries
+// Backward compatibility
 export const createPatient = createPerson;
-export const getPatientsByUserId = (userId: number) => getPeopleByUserId(userId, "patient");
+export const getPatientsByUserId = (userId: string) => getPeopleByUserId(userId, "patient");
 export const getPatientById = getPersonById;
 export const updatePatient = updatePerson;
 export const deletePatient = deletePerson;
 
-// Detection event queries
-export async function logDetectionEvent(data: {
-  personId?: number | null;
-  patientId?: number | null; // For legacy
-  userId: number;
-  eventType: "patient present" | "patient absent" | "unknown person detected" | "person recognized";
-  severity: "info" | "warning" | "alert";
-  description?: string;
-  detectedFaceDescriptor?: unknown;
-  matchConfidence?: string | null;
-  roomId?: string;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
+// --- Detection Events (RTDB for Real-time) ---
 
-  const finalPersonId = data.personId || data.patientId;
-
-  const result = await db.insert(detectionEvents).values([{
+export async function logDetectionEvent(data: InsertDetectionEvent): Promise<{ id: string }> {
+  const eventRef = adminDb.ref(`detectionEvents/${data.userId}`).push();
+  const eventId = eventRef.key!;
+  const now = new Date().toISOString();
+  
+  const eventData = {
     ...data,
-    personId: finalPersonId,
-    patientId: undefined // not in schema anymore
-  } as any]);
+    id: eventId,
+    timestamp: data.timestamp || now,
+    createdAt: now,
+  };
 
-  // Log to physical file
-  logToActivityFile({
-    timestamp: new Date().toISOString(),
+  await eventRef.set(eventData);
+
+  // Also log to Activity Logs
+  await logToActivity({
     roomId: data.roomId || "unknown",
-    personId: finalPersonId,
-    type: data.eventType,
-    description: data.description || `Severity: ${data.severity}`
+    personId: data.personId || null,
+    activityType: data.eventType,
+    details: data.description || `Severity: ${data.severity}`,
+    timestamp: now,
   });
 
-  return result;
+  return { id: eventId };
 }
 
-export async function getDetectionEventsByUserId(userId: number, limit: number = 100) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(detectionEvents)
-    .where(eq(detectionEvents.userId, userId))
-    .orderBy(desc(detectionEvents.timestamp))
-    .limit(limit);
+export async function getDetectionEventsByUserId(userId: string, limit: number = 100): Promise<DetectionEvent[]> {
+  const snapshot = await adminDb.ref(`detectionEvents/${userId}`)
+    .orderByChild("timestamp")
+    .limitToLast(limit)
+    .once("value");
+  
+  const val = snapshot.val();
+  if (!val) return [];
+  
+  return Object.values(val) as DetectionEvent[];
 }
 
-export async function getDetectionEventsByPersonId(personId: number, limit: number = 100) {
-  const db = await getDb();
-  if (!db) return [];
+export async function getDetectionEventsByPersonId(personId: string, limit: number = 100): Promise<DetectionEvent[]> {
+  // RTDB doesn't support complex filtering well across all users easily without indexing
+  // But we can filter client-side or restructure if needed.
+  // For now, let's assume we query by userId first then filter.
+  // Actually, for simplicity, let's use Firestore for events if we need many-to-many filtering.
+  // BUT the user wants real-time. Let's keep RTDB and just use a flatter structure if needed.
+  
+  // Refined: Query all events for a user and filter for the person.
+  // In a real app, we'd store a secondary index `personEvents/${personId}`.
+  const snapshot = await adminDb.ref(`detectionEvents`)
+    .once("value");
+  
+  const allEvents: any[] = [];
+  snapshot.forEach((userEvents) => {
+    userEvents.forEach((event: any) => {
+      if (event.val().personId === personId) {
+        allEvents.push(event.val());
+      }
+    });
+  });
 
-  return await db
-    .select()
-    .from(detectionEvents)
-    .where(eq(detectionEvents.personId, personId))
-    .orderBy(desc(detectionEvents.timestamp))
-    .limit(limit);
+  return allEvents.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, limit);
 }
 
 export const getDetectionEventsByPatientId = getDetectionEventsByPersonId;
 
-// Alert log queries
-export async function createAlertLog(data: {
-  userId: number;
-  detectionEventId?: number | null;
-  alertType: "unknown person detected" | "patient missing";
-  severity: "warning" | "alert";
-  title: string;
-  message?: string;
-  roomId?: string;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
+// --- Alert Logs ---
 
-  return await db.insert(alertLogs).values([data as any]);
+export async function createAlertLog(data: InsertAlertLog): Promise<{ id: string }> {
+  const now = new Date().toISOString();
+  const res = await adminFirestore.collection("alertLogs").add({
+    ...data,
+    id: "", // placeholder
+    isResolved: 0,
+    notificationSent: 0,
+    createdAt: now,
+    resolvedAt: null,
+  });
+  await res.update({ id: res.id });
+  return { id: res.id };
 }
 
-export async function getAlertLogsByUserId(userId: number, limit: number = 100) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(alertLogs)
-    .where(eq(alertLogs.userId, userId))
-    .orderBy(desc(alertLogs.createdAt))
-    .limit(limit);
+export async function getAlertLogsByUserId(userId: string, limit: number = 100): Promise<AlertLog[]> {
+  const snapshot = await adminFirestore.collection("alertLogs")
+    .where("userId", "==", userId)
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+  
+  return snapshot.docs.map((doc: any) => doc.data() as AlertLog);
 }
 
-// Physical file logging
-// Physical file logging and Firebase DB logging
-async function logToActivityFile(log: any) {
-  // 1. Log locally
-  try {
-    const logDir = path.join(process.cwd(), "logs");
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir);
-    }
-    const logFile = path.join(logDir, "activity.log");
-    const logLine = `[${log.timestamp}] Room: ${log.roomId} | PersonID: ${log.personId || 'Unknown'} | Type: ${log.type} | Info: ${log.description}\n`;
-    fs.appendFileSync(logFile, logLine);
-  } catch (error) {
-    console.error("[Logging] Failed to write to activity file:", error);
-  }
+// --- Activity Logs ---
 
-  // 2. Log to Firebase Realtime Database
-  try {
-    const dbUrl = process.env.VITE_FIREBASE_DATABASE_URL;
-    if (dbUrl) {
-      // Note: This assumes the database rules allow writes without authentication for dev,
-      // or we append .json
-      const url = `${dbUrl.replace(/\/$/, "")}/logs.json`;
-      await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...log,
-          serverTimestamp: { ".sv": "timestamp" }
-        })
-      });
-    }
-  } catch (error) {
-    console.error("[Logging] Failed to write to Firebase DB:", error);
-  }
+async function logToActivity(data: InsertRoomActivityLog): Promise<void> {
+  await adminDb.ref("roomActivityLogs").push({
+    ...data,
+    timestamp: data.timestamp || new Date().toISOString(),
+  });
 }

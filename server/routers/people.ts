@@ -11,7 +11,7 @@ export const peopleRouter = router({
     ),
 
   getById: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .query(({ input }) => db.getPersonById(input.id)),
 
   create: protectedProcedure
@@ -32,7 +32,7 @@ export const peopleRouter = router({
 
   update: protectedProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.string(),
       name: z.string().optional(),
       role: z.enum(["patient", "doctor", "nurse", "other"]).optional(),
       roomId: z.string().optional().nullable(),
@@ -54,12 +54,12 @@ export const peopleRouter = router({
     ),
 
   delete: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .mutation(({ input }) => db.deletePerson(input.id)),
 
   uploadPhoto: protectedProcedure
     .input(z.object({
-      personId: z.number(),
+      personId: z.string(),
       photoBase64: z.string().optional(),
       photoUrl: z.string().optional(),
       photoStorageKey: z.string().optional(),
@@ -78,11 +78,9 @@ export const peopleRouter = router({
 
         // If base64 is provided and we don't have a URL yet, upload it
         if (input.photoBase64 && !finalPhotoUrl) {
-          // Convert base64 to buffer
           const base64Data = input.photoBase64.replace(/^data:image\/\w+;base64,/, "");
           const buffer = Buffer.from(base64Data, "base64");
 
-          // Upload to storage
           const filename = `person-${input.personId}-${Date.now()}.jpg`;
           const { url, key } = await storagePut(
             `people-photos/${filename}`,
@@ -97,11 +95,8 @@ export const peopleRouter = router({
           throw new Error("No photo provided for enrollment");
         }
 
-        // Store descriptor as a plain JS number array.
-        // Drizzle's json column will serialise it as "[0.12, ...]" cleanly.
         const descriptorArray = Array.from(input.faceDescriptor);
 
-        // Update person with photo and face descriptor
         await db.updatePerson(input.personId, {
           photoUrl: finalPhotoUrl,
           photoStorageKey: finalPhotoKey,
@@ -121,6 +116,8 @@ export const peopleRouter = router({
 
   syncFirebasePatients: protectedProcedure
     .mutation(async ({ ctx }) => {
+      // Since everything is on Firebase now, this sync might be redundant or different
+      // but let's keep it for compatibility with the legacy RTDB patients_meta if it exists
       const dbUrl = process.env.VITE_FIREBASE_DATABASE_URL;
       if (!dbUrl) throw new Error("Firebase Database URL not configured");
 
@@ -144,7 +141,6 @@ export const peopleRouter = router({
       }));
 
       for (const p of patientsToSync) {
-        // Find by firebaseId, or name fallback
         const exists = existingPeople.find(ep => 
           ep.firebaseId === p.firebaseId || (!ep.firebaseId && ep.name === p.name)
         );
@@ -156,10 +152,12 @@ export const peopleRouter = router({
             role: "patient",
             roomId: p.roomId,
             firebaseId: p.firebaseId,
+            photoUrl: null,
+            photoStorageKey: null,
+            enrolledFaceDescriptor: null,
           });
           added++;
         } else if (!exists.firebaseId) {
-          // Update the existing person with firebaseId
           await db.updatePerson(exists.id, {
             firebaseId: p.firebaseId,
           });
@@ -170,5 +168,4 @@ export const peopleRouter = router({
     }),
 });
 
-// Backward compatibility export
 export const patientsRouter = peopleRouter;
