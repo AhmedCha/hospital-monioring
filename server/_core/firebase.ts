@@ -12,7 +12,15 @@ if (!admin.apps.length) {
   try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       console.log("[Firebase Admin] Initializing with service account...");
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      let saString = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+      
+      // Remove surrounding single or double quotes if present
+      if ((saString.startsWith("'") && saString.endsWith("'")) || 
+          (saString.startsWith('"') && saString.endsWith('"'))) {
+        saString = saString.slice(1, -1);
+      }
+      
+      const serviceAccount = JSON.parse(saString);
       
       // Fix for private key newlines if they are escaped in the .env string
       if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {

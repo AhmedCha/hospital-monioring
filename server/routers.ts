@@ -17,9 +17,12 @@ export const appRouter = router({
       .input(z.object({ idToken: z.string() }))
       .mutation(async ({ ctx, input }) => {
         try {
+          console.log("[Auth] Starting login process...");
           const { uid, name, email } = await verifyFirebaseToken(input.idToken);
+          console.log(`[Auth] Firebase token verified for: ${uid} (${email})`);
 
           // Sync user to Firestore
+          console.log("[Auth] Upserting user to DB...");
           await db.upsertUser({
             openId: uid,
             name: name || email || "Anonymous",
@@ -27,23 +30,29 @@ export const appRouter = router({
             loginMethod: "firebase",
             lastSignedIn: new Date().toISOString(),
           });
+          console.log("[Auth] User upserted.");
 
           const user = await db.getUserByOpenId(uid);
           if (!user) throw new Error("Failed to create user");
+          console.log("[Auth] User retrieved from DB.");
 
           // Create session cookie
+          console.log("[Auth] Creating session token...");
           const sessionToken = await sdk.createSessionToken(uid, { name: user.name || "" });
           const cookieOptions = getSessionCookieOptions(ctx.req);
+          console.log("[Auth] Setting session cookie...");
           
           ctx.res.cookie(COOKIE_NAME, sessionToken, {
             ...cookieOptions,
             maxAge: ONE_YEAR_MS,
           });
 
+          console.log("[Auth] Login successful.");
           return { success: true, user };
-        } catch (error) {
+        } catch (error: any) {
           const msg = error instanceof Error ? error.message : String(error);
           console.error("[Auth] Firebase login failed:", msg);
+          if (error.stack) console.error(error.stack);
           throw new Error(`Firebase token verification failed: ${msg}`);
         }
       }),
