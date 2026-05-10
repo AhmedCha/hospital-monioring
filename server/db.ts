@@ -128,7 +128,7 @@ export async function getDetectionEventsByUserId(userId: string, limit: number =
     .limit(limit)
     .get();
     
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DetectionEvent));
+  return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as DetectionEvent));
 }
 
 export async function logRoomActivity(data: InsertRoomActivityLog): Promise<{ id: string }> {
@@ -154,7 +154,7 @@ export async function getRoomActivityLogsByRoomId(roomId: string, limit: number 
     .limit(limit)
     .get();
     
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomActivityLog));
+  return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as RoomActivityLog));
 }
 
 export async function getDetectionEventsByPersonId(personId: string, limit: number = 100): Promise<DetectionEvent[]> {

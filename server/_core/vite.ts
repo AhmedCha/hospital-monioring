@@ -6,7 +6,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 
-export async function setupVite(app: Application, server: Server) {
+export async function setupVite(app: any, server: Server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -47,7 +47,7 @@ export async function setupVite(app: Application, server: Server) {
   });
 }
 
-export function serveStatic(app: Application) {
+export function serveStatic(app: any) {
   const distPath =
     process.env.NODE_ENV === "development"
       ? path.resolve(import.meta.dirname, "../..", "dist", "public")
