@@ -30,6 +30,8 @@ export const peopleRouter = router({
       if (ctx.user.role === "doctor") {
         return allPeople.filter(p => 
           p.id === meAsPerson.id || // See self
+          p.role === "doctor" || // See all doctors
+          p.role === "nurse" || // See all nurses
           (p.role === "patient" && p.assignedDoctorId === meAsPerson.id) // See assigned patients
         );
       }
@@ -37,6 +39,8 @@ export const peopleRouter = router({
       if (ctx.user.role === "nurse") {
         return allPeople.filter(p => 
           p.id === meAsPerson.id || // See self
+          p.role === "doctor" || // See all doctors
+          p.role === "nurse" || // See all nurses
           (p.role === "patient" && p.assignedNurseId === meAsPerson.id) // See assigned patients
         );
       }

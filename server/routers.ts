@@ -70,11 +70,14 @@ export const appRouter = router({
 
   events: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const allEvents = await db.getDetectionEventsByUserId(ctx.user.id, 500);
+      const meAsPersonInAnyFacility = await db.getPersonByEmail(ctx.user.email || "");
+      const ownerId = meAsPersonInAnyFacility?.userId || ctx.user.id;
+      
+      const allEvents = await db.getDetectionEventsByUserId(ownerId, 500);
       
       if (ctx.user.role === "admin") return allEvents;
 
-      const allPeople = await db.getPeopleByUserId(ctx.user.id);
+      const allPeople = await db.getPeopleByUserId(ownerId);
       const meAsPerson = allPeople.find(p => p.email === ctx.user.email);
       
       if (!meAsPerson) return [];
@@ -197,16 +200,19 @@ export const appRouter = router({
 
   alerts: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const allAlerts = await db.getAlertLogsByUserId(ctx.user.id, 500);
+      const meAsPersonInAnyFacility = await db.getPersonByEmail(ctx.user.email || "");
+      const ownerId = meAsPersonInAnyFacility?.userId || ctx.user.id;
+
+      const allAlerts = await db.getAlertLogsByUserId(ownerId, 500);
       
       if (ctx.user.role === "admin") return allAlerts;
 
-      const allPeople = await db.getPeopleByUserId(ctx.user.id);
+      const allPeople = await db.getPeopleByUserId(ownerId);
       const meAsPerson = allPeople.find(p => p.email === ctx.user.email);
       
       if (!meAsPerson) return [];
 
-      const allEvents = await db.getDetectionEventsByUserId(ctx.user.id, 1000);
+      const allEvents = await db.getDetectionEventsByUserId(ownerId, 1000);
 
       if (ctx.user.role === "doctor") {
         const myPatientIds = allPeople.filter(p => p.assignedDoctorId === meAsPerson.id).map(p => p.id);

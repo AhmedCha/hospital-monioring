@@ -154,22 +154,25 @@ export default function Patients() {
           <p className="text-muted-foreground mt-2">Enroll and manage patients for real-time monitoring</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={handleSyncFirebase}
-            disabled={isSyncing}
-          >
-            <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
-            Sync from Firebase
-          </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="w-4 h-4" />
-                Add Patient
-              </Button>
-            </DialogTrigger>
+          {user?.role === "admin" && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleSyncFirebase}
+              disabled={isSyncing}
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
+              Sync Data
+            </Button>
+          )}
+          {user?.role !== "nurse" && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Patient
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Enroll New Patient</DialogTitle>
@@ -237,6 +240,7 @@ export default function Patients() {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
