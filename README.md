@@ -1,6 +1,18 @@
-# 🏥 Hospital Monitoring System
+# Hospital Monitoring System
 
-A real-time hospital monitoring platform built with React, Node.js/Express, tRPC, Firebase, and on-device AI for face recognition and patient vitals analysis.
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000000)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=ffffff)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=ffffff)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.1-06B6D4?logo=tailwindcss&logoColor=ffffff)](https://tailwindcss.com/)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=ffffff)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=ffffff)](https://expressjs.com/)
+[![tRPC](https://img.shields.io/badge/tRPC-11.6-398CCB?logo=trpc&logoColor=ffffff)](https://trpc.io/)
+[![Firebase](https://img.shields.io/badge/Firebase-12.13-FFCA28?logo=firebase&logoColor=000000)](https://firebase.google.com/)
+[![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-4.22-FF6F00?logo=tensorflow&logoColor=ffffff)](https://www.tensorflow.org/js)
+[![Vercel](https://img.shields.io/badge/Vercel-Serverless-000000?logo=vercel&logoColor=ffffff)](https://vercel.com/)
+[![ESP32](https://img.shields.io/badge/ESP32-IoT-323330?logo=espressif&logoColor=ffffff)](https://www.espressif.com/)
+
+A real-time hospital monitoring platform that combines IoT vitals streaming, on-device face recognition, and server-side analytics to support clinical awareness and alerting.
 
 ---
 
@@ -23,6 +35,7 @@ A real-time hospital monitoring platform built with React, Node.js/Express, tRPC
 ## Overview
 
 The Hospital Monitoring System enables real-time patient monitoring through:
+
 - **Face recognition** to verify patient/staff presence in rooms
 - **IoT vitals streaming** (heart rate, SpO2, temperature, humidity) via ESP32 sensors
 - **AI-driven clinical insights** to detect anomalies and forecast vital trends
@@ -217,8 +230,6 @@ sequenceDiagram
 
 ---
 
-
-
 ---
 
 ## 🤖 AI Models & How They Work
@@ -240,6 +251,7 @@ This project uses **two distinct AI systems**: an on-device face recognition pip
 TinyFaceDetector is a lightweight, fast Convolutional Neural Network (CNN) that scans each video frame from the room camera to detect bounding boxes around all visible faces. It is optimized for real-time use — running every few hundred milliseconds on a live webcam stream — while being small enough to load over the network and execute entirely in the browser.
 
 **How it works in this project:**
+
 ```
 Live webcam video frame
         ↓
@@ -265,6 +277,7 @@ Passed to FaceLandmark68Net + FaceRecognitionNet
 FaceLandmark68Net is a neural network that maps 68 precise facial keypoints (eyes, nose, mouth, jawline, eyebrows) onto each detected face bounding box. These landmarks are used to normalize the face geometry before it is passed to the recognition network, significantly improving accuracy regardless of pose or lighting changes.
 
 **How it works in this project:**
+
 ```
 Face bounding box (from TinyFaceDetector)
         ↓
@@ -296,6 +309,7 @@ FaceRecognitionNet is the core identity model. It takes a normalized face crop a
 **How it works in this project:**
 
 *Enrollment (one-time setup per person):*
+
 ```
 Admin uploads a clear photo of patient/staff
         ↓
@@ -305,6 +319,7 @@ Descriptor saved to Firebase Firestore (as a number array)
 ```
 
 *Live recognition (continuous during monitoring):*
+
 ```
 New face detected in the video stream
         ↓
@@ -348,6 +363,7 @@ FaceExpressionNet classifies the emotional expression on each detected face into
 This is the project's server-side intelligence layer. It analyzes a patient's historical vitals (heart rate, SpO2) and produces clinical insights, anomaly flags, and short-term forecasts. It consists of three algorithms working in sequence:
 
 #### Algorithm 1 — Z-Score Anomaly Detection
+
 ```
 Collect last N readings of Heart Rate / SpO2
         ↓
@@ -357,9 +373,11 @@ For each reading: Z-Score = |value − μ| / σ
         ↓
 If Z-Score > 2.5 → reading is flagged as an anomaly
 ```
+
 Detects sudden spikes or drops that deviate significantly from the patient's own recent baseline — more personalized than fixed clinical thresholds.
 
 #### Algorithm 2 — Linear Regression Forecasting
+
 ```
 Take the sequence of recent vitals readings
         ↓
@@ -369,9 +387,11 @@ Extrapolate 5 future data points (≈ next 5 minutes)
         ↓
 Return predicted Heart Rate and SpO2 trend
 ```
+
 Provides short-term trend forecasting to help clinicians anticipate deterioration before it becomes critical.
 
 #### Algorithm 3 — Rule-based Clinical Interpretation
+
 ```
 Latest SpO2 < 94% OR anomaly detected → Status: WARNING
 Heart Rate > 110 BPM or < 50 BPM OR anomaly → Status: WARNING
@@ -379,6 +399,7 @@ Heart Rate > 130 BPM → Status: CRITICAL
 SpO2 < 90% → Status: CRITICAL (immediate assessment required)
 All within range → Status: STABLE
 ```
+
 Translates the raw numbers and anomaly flags into a human-readable clinical status and actionable insight message displayed on the dashboard.
 
 ---
